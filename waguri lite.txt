@@ -1205,28 +1205,43 @@ LocalTab:Toggle({
     end
 })
 
--- ========== SILENT AIM (FIXED - SAME AS TEST WAGURI) ==========
-local silentAimEnabled = false
+-- ── Input / UIS (SHADOWX SILENT AIM) ────────────────────────────────────────────────
+
 local touchStartPos = nil
 
 UIS.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-    or input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
         touchStartPos = input.Position
+    elseif input.UserInputType == Enum.UserInputType.Touch then
+        local vp = workspace.CurrentCamera.ViewportSize
+        -- Only track the touch if it starts in the upper 65% of the screen
+        -- This excludes the jump button and all bottom control buttons entirely
+        if input.Position.Y < (vp.Y * 0.65) then
+            touchStartPos = input.Position
+        end
     end
 end)
 
 UIS.InputEnded:Connect(function(input)
     if not silentAimEnabled then return end
-    local isFire = input.UserInputType == Enum.UserInputType.MouseButton1
-               or (input.UserInputType == Enum.UserInputType.Touch
-                   and not UIS:GetFocusedTextBox()
-                   and input.Position.X > (workspace.CurrentCamera.ViewportSize.X * 0.35))
-    if not isFire then return end
-    if not touchStartPos then return end
-    local delta = (Vector2.new(input.Position.X, input.Position.Y) - Vector2.new(touchStartPos.X, touchStartPos.Y)).Magnitude
-    touchStartPos = nil
-    if delta > 12 then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if not touchStartPos then return end
+        local delta = (Vector2.new(input.Position.X, input.Position.Y) - Vector2.new(touchStartPos.X, touchStartPos.Y)).Magnitude
+        touchStartPos = nil
+        if delta > 12 then return end
+    elseif input.UserInputType == Enum.UserInputType.Touch then
+        if UIS:GetFocusedTextBox() then return end
+        local vp = workspace.CurrentCamera.ViewportSize
+        -- Must start and end in upper 65% and right 65% of screen
+        if input.Position.X <= (vp.X * 0.35) then return end
+        if input.Position.Y >= (vp.Y * 0.65) then return end
+        if not touchStartPos then return end
+        local delta = (Vector2.new(input.Position.X, input.Position.Y) - Vector2.new(touchStartPos.X, touchStartPos.Y)).Magnitude
+        touchStartPos = nil
+        if delta > 12 then return end
+    else
+        return
+    end
     local myChar = lp.Character
     local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
     if not myHRP then return end
@@ -1240,6 +1255,41 @@ UIS.InputEnded:Connect(function(input)
     pcall(function()
         remote:FireServer(CFrame.new(myHRP.Position, aimPos), CFrame.new(aimPos))
     end)
+end)
+
+UIS.JumpRequest:Connect(function()
+    local char = lp.Character
+    if not char then return end
+
+    if infiniteJumpEnabled then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum and originalJumpPower then
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            hum.JumpPower = originalJumpPower
+        end
+    end
+
+    if fakeBombEnabled and char:FindFirstChild("FakeBomb") then
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        if fbConn then fbConn:Disconnect() fbConn = nil end
+        local t0 = tick()
+        task.defer(function()
+            if lp.Character ~= char then return end
+            fbConn = RunService.Heartbeat:Connect(function()
+                if lp.Character ~= char or tick() - t0 > 3 then
+                    fbConn:Disconnect() fbConn = nil return
+                end
+                local velY = hrp.AssemblyLinearVelocity.Y
+                if velY > 5 then
+                    fbConn:Disconnect() fbConn = nil
+                    task.delay(velY / GRAVITY, function()
+                        if lp.Character == char then doFakeBomb() end
+                    end)
+                end
+            end)
+        end)
+    end
 end)
 
 MainTab:Section({ Title = "Silent Aim" })
