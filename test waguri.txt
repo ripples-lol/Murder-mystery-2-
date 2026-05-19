@@ -2230,7 +2230,7 @@ local InnocentEspToggle = VisualsTab:Toggle({
     end
 })
 
--- ── Role ESP (Instant Reveal) - MURDERER & SHERIFF ONLY ─────────────────────────────
+-- ── Role ESP (Names only for Murderer & Sheriff) ─────────────────────────────
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
@@ -2238,9 +2238,10 @@ local roleESPEnabled = false
 local roleESPLoop = nil
 
 local roleColors2 = {
-    Murderer = Color3.fromRGB(255, 0, 0),
-    Sheriff  = Color3.fromRGB(0, 100, 255),
-    -- Hero and Innocent are hidden (no ESP)
+    Murderer = Color3.fromRGB(255, 0, 0),      -- Red text
+    Sheriff  = Color3.fromRGB(0, 100, 255),    -- Blue text
+    Innocent = Color3.fromRGB(0, 255, 0),      -- Green highlight but NO text
+    Hero     = Color3.fromRGB(255, 255, 0),    -- Yellow highlight but NO text
 }
 
 local function getRoles()
@@ -2251,11 +2252,7 @@ local function getRoles()
     local out = {}
     for plr, plrData in pairs(data) do
         if not plrData.Dead then
-            -- Only store Murderer and Sheriff roles
-            local role = plrData.Role
-            if role == "Murderer" or role == "Sheriff" then
-                out[plr] = role
-            end
+            out[plr] = plrData.Role
         end
     end
     return out
@@ -2278,9 +2275,15 @@ end
 local function applyRoleHighlight(character, role)
     local existing = character:FindFirstChild("RoleHighlight2")
     if existing then existing:Destroy() end
+    
+    local color = role == "Murderer" and Color3.fromRGB(255, 0, 0) or
+                  role == "Sheriff" and Color3.fromRGB(0, 100, 255) or
+                  role == "Hero" and Color3.fromRGB(255, 255, 0) or
+                  Color3.fromRGB(0, 255, 0)  -- Innocent green
+    
     local hl = Instance.new("Highlight")
     hl.Name                = "RoleHighlight2"
-    hl.FillColor           = roleColors2[role] or Color3.fromRGB(200, 200, 200)
+    hl.FillColor           = color
     hl.OutlineColor        = Color3.new(1, 1, 1)
     hl.DepthMode           = Enum.HighlightDepthMode.AlwaysOnTop
     hl.FillTransparency    = 0.4
@@ -2291,12 +2294,19 @@ end
 local function createRoleBillboard(head, role, playerName)
     local existing = head:FindFirstChild("RoleESP2")
     if existing then existing:Destroy() end
+    
+    -- ONLY create billboard for Murderer and Sheriff
+    if role ~= "Murderer" and role ~= "Sheriff" then
+        return  -- No text for Innocent or Hero
+    end
+    
     local esp = Instance.new("BillboardGui")
     esp.Name        = "RoleESP2"
     esp.Adornee     = head
     esp.Size        = UDim2.new(5, 0, 5, 0)
     esp.AlwaysOnTop = true
     esp.Parent      = head
+    
     local label = Instance.new("TextLabel")
     label.Name                   = "RoleLabel2"
     label.Parent                 = esp
@@ -2305,8 +2315,7 @@ local function createRoleBillboard(head, role, playerName)
     label.TextStrokeTransparency = 0
     label.TextSize               = 14
     label.Font                   = Enum.Font.FredokaOne
-    label.TextColor3             = roleColors2[role] or Color3.fromRGB(200, 200, 200)
-    -- Only show role name, no player name
+    label.TextColor3             = role == "Murderer" and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 100, 255)
     label.Text                   = role == "Murderer" and "🔪 MURDERER" or "⭐ SHERIFF"
 end
 
@@ -2316,10 +2325,12 @@ local function updateRoleESP()
         if player ~= LocalPlayer and player.Character then
             local head = player.Character:FindFirstChild("Head")
             if head then
-                local role = roles[player.Name]
-                if role then  -- Only show if Murderer or Sheriff
+                local role = roles[player.Name] or "Innocent"
+                -- Apply highlight to EVERYONE (Murderer, Sheriff, Innocent, Hero)
+                applyRoleHighlight(player.Character, role)
+                -- Only show text for Murderer and Sheriff
+                if role == "Murderer" or role == "Sheriff" then
                     createRoleBillboard(head, role, player.Name)
-                    applyRoleHighlight(player.Character, role)
                 end
             end
         end
@@ -2339,8 +2350,28 @@ local function startRoleESP()
 end
 
 VisualsTab:Toggle({
-    Title    = "Role ESP (Murderer & Sheriff Only)",
-    Desc     = "Shows ESP only for Murderer (red) and Sheriff (blue)",
+    Title    = "Role ESP (Names: Murderer & Sheriff only)",
+    Desc     = "Shows highlights for all, but names only for Murderer (red) and Sheriff (blue)",
+    Icon     = "eye",
+    Type     = "Checkbox",
+    Value    = false,
+    Callback = function(state)
+        roleESPEnabled = state
+        if state then
+            startRoleESP()
+        else
+            clearRoleESP()
+            if roleESPLoop then
+                task.cancel(roleESPLoop)
+                roleESPLoop = nil
+            end
+        end
+    end
+})
+
+VisualsTab:Toggle({
+    Title    = "Role ESP (Names: Murderer & Sheriff only)",
+    Desc     = "Shows highlights for all, but names only for Murderer (red) and Sheriff (blue)",
     Icon     = "eye",
     Type     = "Checkbox",
     Value    = false,
