@@ -2226,10 +2226,12 @@ end)
 
 UIS.InputEnded:Connect(function(input)
     if not silentAimEnabled then return end
+    local vp = workspace.CurrentCamera.ViewportSize
     local isFire = input.UserInputType == Enum.UserInputType.MouseButton1
                or (input.UserInputType == Enum.UserInputType.Touch
                    and not UIS:GetFocusedTextBox()
-                   and input.Position.X > (workspace.CurrentCamera.ViewportSize.X * 0.35))
+                   and input.Position.X > (vp.X * 0.35)
+                   and input.Position.Y < (vp.Y * 0.75)) -- exclude bottom area where jump/action buttons sit
     if not isFire then return end
     if not touchStartPos then return end
     local delta = (Vector2.new(input.Position.X, input.Position.Y) - Vector2.new(touchStartPos.X, touchStartPos.Y)).Magnitude
