@@ -196,6 +196,7 @@ Window:EditOpenButton({
 })
 
 local HomeTab     = Window:Tab({ Title = "Home",     Icon = "radar"    })
+local CombatTab = Window:Tab({ Title = "Combat", Icon = "cloud" })
 local MainTab     = Window:Tab({ Title = "Main",     Icon = "sword"    })
 local PlayersTab  = Window:Tab({ Title = "Players",  Icon = "users"    })
 local VisualsTab  = Window:Tab({ Title = "Visuals",  Icon = "eye"      })
