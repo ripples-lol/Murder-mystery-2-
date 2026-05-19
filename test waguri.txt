@@ -196,7 +196,8 @@ Window:EditOpenButton({
 })
 
 local HomeTab     = Window:Tab({ Title = "Home",     Icon = "radar"    })
-local MainTab     = Window:Tab({ Title = "Main",     Icon = "sword"    })
+local YUKIOTab = Window:Tab({ Title = "Waguri main", Icon = "sword" })
+local MainTab     = Window:Tab({ Title = "Mm2 and mmv",     Icon = "sword"    })
 local PlayersTab  = Window:Tab({ Title = "Players",  Icon = "users"    })
 local VisualsTab  = Window:Tab({ Title = "Visuals",  Icon = "eye"      })
 local AutoFarmTab = Window:Tab({ Title = "Auto Farm", Icon = "star"    })
@@ -1588,17 +1589,6 @@ local AutoGrabGunToggle = MainTab:Toggle({
                 doGrabGun()
             end)
         end
-        saveConfig()
-    end
-})
-
-local FakeBombToggle = MainTab:Toggle({
-    Title    = "Fake Bomb",
-    Desc     = "Auto triggers fake bomb at jump apex",
-    Type     = "Checkbox",
-    Value    = false,
-    Callback = function(state)
-        fakeBombEnabled = state
         saveConfig()
     end
 })
