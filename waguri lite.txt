@@ -682,57 +682,123 @@ local function SHubFling(TargetPlayer)
     until (Root.Position - env.OldPos.p).Magnitude < 25
 end
 
--- ========== ESP ==========
-local roleColors = {
-    Murderer = Color3.fromRGB(255, 0, 0), Sheriff = Color3.fromRGB(0, 0, 255),
-    Hero = Color3.fromRGB(255, 255, 0), Innocent = Color3.fromRGB(0, 255, 0),
-    Default = Color3.fromRGB(200, 200, 200)
+-- ── Role ESP (Names only for Murderer & Sheriff) ─────────────────────────────
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local roleESPEnabled = false
+local roleESPLoop = nil
+
+local roleColors2 = {
+    Murderer = Color3.fromRGB(255, 0, 0),      -- Red text
+    Sheriff  = Color3.fromRGB(0, 100, 255),    -- Blue text
+    Innocent = Color3.fromRGB(0, 255, 0),      -- Green highlight but NO text
+    Hero     = Color3.fromRGB(255, 255, 0),    -- Yellow highlight but NO text
 }
-local function clearESP()
+
+local function getRoles()
+    local ok, data = pcall(function()
+        return ReplicatedStorage:FindFirstChild("GetPlayerData", true):InvokeServer()
+    end)
+    if not ok or not data then return {} end
+    local out = {}
+    for plr, plrData in pairs(data) do
+        if not plrData.Dead then
+            out[plr] = plrData.Role
+        end
+    end
+    return out
+end
+
+local function clearRoleESP()
     for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= lp and player.Character then
+        if player ~= LocalPlayer and player.Character then
             local head = player.Character:FindFirstChild("Head")
-            if head then local e = head:FindFirstChild("RoleESP") if e then e:Destroy() end end
-            local hl = player.Character:FindFirstChild("RoleHighlight")
+            if head then
+                local esp = head:FindFirstChild("RoleESP2")
+                if esp then esp:Destroy() end
+            end
+            local hl = player.Character:FindFirstChild("RoleHighlight2")
             if hl then hl:Destroy() end
         end
     end
 end
-local function applyHighlight(character, role)
-    local existing = character:FindFirstChild("RoleHighlight") if existing then existing:Destroy() end
-    local hl = Instance.new("Highlight") hl.Name = "RoleHighlight"
-    hl.FillColor = roleColors[role] or roleColors.Default
-    hl.OutlineColor = Color3.new(1,1,1) hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    hl.FillTransparency = 0.4 hl.OutlineTransparency = 0 hl.Parent = character
+
+local function applyRoleHighlight(character, role)
+    local existing = character:FindFirstChild("RoleHighlight2")
+    if existing then existing:Destroy() end
+    
+    local color = role == "Murderer" and Color3.fromRGB(255, 0, 0) or
+                  role == "Sheriff" and Color3.fromRGB(0, 100, 255) or
+                  role == "Hero" and Color3.fromRGB(255, 255, 0) or
+                  Color3.fromRGB(0, 255, 0)  -- Innocent green
+    
+    local hl = Instance.new("Highlight")
+    hl.Name                = "RoleHighlight2"
+    hl.FillColor           = color
+    hl.OutlineColor        = Color3.new(1, 1, 1)
+    hl.DepthMode           = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.FillTransparency    = 0.4
+    hl.OutlineTransparency = 0
+    hl.Parent              = character
 end
-local function createBillboard(head, role, playerName)
-    local esp = Instance.new("BillboardGui") esp.Name = "RoleESP" esp.Adornee = head
-    esp.Size = UDim2.new(5,0,5,0) esp.AlwaysOnTop = true esp.Parent = head
-    local label = Instance.new("TextLabel", esp)
-    label.Size = UDim2.new(1,0,1,0) label.BackgroundTransparency = 1
-    label.TextStrokeTransparency = 0 label.TextSize = 14
-    label.TextColor3 = roleColors[role] or roleColors.Default
-    label.Font = Enum.Font.FredokaOne
-    label.Text = ("Role: %s • Name: %s"):format(role, playerName)
+
+local function createRoleBillboard(head, role, playerName)
+    local existing = head:FindFirstChild("RoleESP2")
+    if existing then existing:Destroy() end
+    
+    -- ONLY create billboard for Murderer and Sheriff
+    if role ~= "Murderer" and role ~= "Sheriff" then
+        return  -- No text for Innocent or Hero
+    end
+    
+    local esp = Instance.new("BillboardGui")
+    esp.Name        = "RoleESP2"
+    esp.Adornee     = head
+    esp.Size        = UDim2.new(5, 0, 5, 0)
+    esp.AlwaysOnTop = true
+    esp.Parent      = head
+    
+    local label = Instance.new("TextLabel")
+    label.Name                   = "RoleLabel2"
+    label.Parent                 = esp
+    label.Size                   = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextStrokeTransparency = 0
+    label.TextSize               = 14
+    label.Font                   = Enum.Font.FredokaOne
+    label.TextColor3             = role == "Murderer" and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 100, 255)
+    label.Text                   = role == "Murderer" and "🔪 MURDERER" or "⭐ SHERIFF"
 end
-local function updateESP()
+
+local function updateRoleESP()
     local roles = getRoles()
     for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= lp and player.Character then
+        if player ~= LocalPlayer and player.Character then
             local head = player.Character:FindFirstChild("Head")
             if head then
-                local role = roles[player.Name] or "Default"
-                if not head:FindFirstChild("RoleESP") then createBillboard(head, role, player.Name)
-                else
-                    local lbl = head.RoleESP:FindFirstChild("RoleLabel")
-                    if lbl then lbl.Text = ("Role: %s • Name: %s"):format(role, player.Name) lbl.TextColor3 = roleColors[role] or roleColors.Default end
+                local role = roles[player.Name] or "Innocent"
+                -- Apply highlight to EVERYONE (Murderer, Sheriff, Innocent, Hero)
+                applyRoleHighlight(player.Character, role)
+                -- Only show text for Murderer and Sheriff
+                if role == "Murderer" or role == "Sheriff" then
+                    createRoleBillboard(head, role, player.Name)
                 end
-                local hl = player.Character:FindFirstChild("RoleHighlight")
-                if not hl then applyHighlight(player.Character, role)
-                else hl.FillColor = roleColors[role] or roleColors.Default end
             end
         end
     end
+end
+
+local function startRoleESP()
+    if roleESPLoop then return end
+    roleESPLoop = task.spawn(function()
+        while roleESPEnabled do
+            pcall(updateRoleESP)
+            task.wait(0.25)
+        end
+        clearRoleESP()
+        roleESPLoop = nil
+    end)
 end
 
 -- ========== GUN AIM HOOK ==========
@@ -766,16 +832,22 @@ end
 MainTab:Section({ Title = "ESP" })
 
 MainTab:Toggle({
-    Title = "ESP Player (Role & Name)", Desc = "Shows role, name and highlight on all players",
-    Icon = "eye", Value = false,
-    Callback = function(Value)
-        env.ESP_ENABLED = Value
-        if Value then
-            task.spawn(function()
-                while env.ESP_ENABLED do pcall(updateESP) task.wait(0.25) end
-                clearESP()
-            end)
-        else clearESP() end
+    Title    = "ESP EVERYONE",
+    Desc     = "I RECOMMEND U TO USE THIS :3",
+    Icon     = "eye",
+    Type     = "Checkbox",
+    Value    = false,
+    Callback = function(state)
+        roleESPEnabled = state
+        if state then
+            startRoleESP()
+        else
+            clearRoleESP()
+            if roleESPLoop then
+                task.cancel(roleESPLoop)
+                roleESPLoop = nil
+            end
+        end
     end
 })
 
