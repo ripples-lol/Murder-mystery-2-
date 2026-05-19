@@ -155,7 +155,6 @@ local function loadConfig()
         if nThrowBtn  then nThrowBtn.Visible  = throwKnifeEnabled  end
         if nGrabBtn   then nGrabBtn.Visible   = grabGunEnabled     end
         if nInvisBtn  then nInvisBtn.Visible  = invisibleEnabled   end
-        if nSilentBtn then nSilentBtn.Visible = silentAimEnabled   end
 
         if TpDropdown.Value    and TpDropdown.Value.Title    then tpTarget    = TpDropdown.Value.Title    end
         if FlingDropdown.Value and FlingDropdown.Value.Title then flingTarget = FlingDropdown.Value.Title end
@@ -1328,18 +1327,11 @@ end
 -- ── Toggles ───────────────────────────────────────────────────────────────────
 local SilentAimToggle = MainTab:Toggle({
     Title    = "Silent Aim",
-    Desc     = "Enable the Silent Aim button (press the button to shoot, no auto-fire)",
+    Desc     = "Aims at the murderer when you click/tap to shoot",
     Type     = "Checkbox",
     Value    = false,
     Callback = function(state)
         silentAimEnabled = state
-        if nSilentBtn then
-            nSilentBtn.Visible = state
-            if nSilentLbl then
-                nSilentLbl.Text       = "Silent Aim"
-                nSilentLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-            end
-        end
         saveConfig()
     end
 })
@@ -1811,38 +1803,7 @@ end
 nInvisBtn, invisNativeLbl = makeNativeBtn("Invisible", doInvisToggle)
 nInvisBtn.Visible = false
 
--- Silent Aim native toggle button (on/off + manual shoot)
-local nSilentBtn, nSilentLbl
 
-local function doSilentAimShoot()
-    if not silentAimEnabled then
-        WindUI:Notify({ Title = "Silent Aim", Content = "Enable Silent Aim toggle first.", Duration = 2, Icon = "x" })
-        return
-    end
-    local myChar = lp.Character
-    local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return end
-    if not murderer then
-        WindUI:Notify({ Title = "Silent Aim", Content = "No murderer detected.", Duration = 2, Icon = "x" })
-        return
-    end
-    local wsModel = Workspace:FindFirstChild(lp.Name)
-    if not wsModel or not wsModel:FindFirstChild("Gun") then
-        WindUI:Notify({ Title = "Silent Aim", Content = "You need a Gun to shoot.", Duration = 2, Icon = "x" })
-        return
-    end
-    local aimPos = getAimPosition()
-    if not aimPos then return end
-    local remote = getShootRemote()
-    if not remote then return end
-    local ok, err = pcall(function()
-        remote:FireServer(CFrame.new(myHRP.Position, aimPos), CFrame.new(aimPos))
-    end)
-    if not ok then warn("[ShadowX] SilentAimShoot: " .. tostring(err)) end
-end
-
-nSilentBtn, nSilentLbl = makeNativeBtn("Silent Aim", doSilentAimShoot)
-nSilentBtn.Visible = false
 
 local function applyWalkSpeed(value)
     local n = tonumber(value)
@@ -2263,9 +2224,30 @@ UIS.InputBegan:Connect(function(input)
     end
 end)
 
--- Silent Aim is now manual-button only; auto-shoot on click removed.
 UIS.InputEnded:Connect(function(input)
-    -- intentionally left empty for silent aim; use the Silent Aim button instead
+    if not silentAimEnabled then return end
+    local isFire = input.UserInputType == Enum.UserInputType.MouseButton1
+               or (input.UserInputType == Enum.UserInputType.Touch
+                   and not UIS:GetFocusedTextBox()
+                   and input.Position.X > (workspace.CurrentCamera.ViewportSize.X * 0.35))
+    if not isFire then return end
+    if not touchStartPos then return end
+    local delta = (Vector2.new(input.Position.X, input.Position.Y) - Vector2.new(touchStartPos.X, touchStartPos.Y)).Magnitude
+    touchStartPos = nil
+    if delta > 12 then return end
+    local myChar = lp.Character
+    local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+    if not murderer then return end
+    local wsModel = Workspace:FindFirstChild(lp.Name)
+    if not wsModel or not wsModel:FindFirstChild("Gun") then return end
+    local aimPos = getAimPosition()
+    if not aimPos then return end
+    local remote = getShootRemote()
+    if not remote then return end
+    pcall(function()
+        remote:FireServer(CFrame.new(myHRP.Position, aimPos), CFrame.new(aimPos))
+    end)
 end)
 
 UIS.JumpRequest:Connect(function()
