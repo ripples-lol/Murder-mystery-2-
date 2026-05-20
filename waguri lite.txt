@@ -428,6 +428,8 @@ end
 task.spawn(function() while true do task.wait(0.5) updateMurderer() end end)
 
 -- exact getAimPosition from test_waguri
+local wallbangEnabled = false
+
 local function getAimPosition()
     if not murderer then return nil end
     local char = murderer.Character
@@ -520,6 +522,7 @@ local function getAimPosition()
         if bp2 then candidates[#candidates + 1] = predHRP + (bp2.Position - pos) end
     end
     if #candidates == 0 then candidates[1] = predHRP + torsoOff end
+
     rayParams.FilterDescendantsInstances = { myChar, char }
     for _, cPos in ipairs(candidates) do
         local dir = cPos - myHRP.Position
@@ -563,6 +566,22 @@ local function doSingleShot()
         remote = getShootRemote()
         if not remote then return end
     end
+
+    if wallbangEnabled and murderer and murderer.Character then
+        -- Just send a fake CFrame right next to the murderer
+        -- your actual character never moves, only the shot origin is faked
+        local tChar = murderer.Character
+        local tHRP  = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        if tHRP then
+            local fakeOrigin = tHRP.CFrame * CFrame.new(0, 0, 3)
+            local aimPos = tHRP.Position
+            pcall(function()
+                remote:FireServer(fakeOrigin, CFrame.new(aimPos))
+            end)
+            return
+        end
+    end
+
     local aimPos = getAimPosition()
     if not aimPos then return end
     pcall(function()
@@ -1029,6 +1048,101 @@ local FakeBombToggle = MainTab:Toggle({
         saveConfig()
     end
 })
+
+-- ========== THROW KNIFE FUNCTION ==========
+local function throwKnife()
+    local char = lp.Character
+    if not char then
+        notify("Throw Knife", "No character found!", "x")
+        return
+    end
+    
+    -- Check if you are the murderer (have knife)
+    local knife = char:FindFirstChild("Knife")
+    if not knife then
+        local bp = lp:FindFirstChild("Backpack")
+        if bp then
+            knife = bp:FindFirstChild("Knife")
+        end
+    end
+    
+    if not knife then
+        notify("Throw Knife", "You need to be the Murderer!", "x")
+        return
+    end
+    
+    -- Find throw remote
+    local knifeEvents = knife:FindFirstChild("Events")
+    local throwRemote = knifeEvents and knifeEvents:FindFirstChild("KnifeThrown")
+    
+    if not throwRemote or not throwRemote:IsA("RemoteEvent") then
+        notify("Throw Knife", "Throw remote not found!", "x")
+        return
+    end
+    
+    -- Find target (Sheriff/Hero first, then any player)
+    local target = nil
+    local roles = getRoles()
+    
+    -- Priority: Sheriff first
+    for playerName, role in pairs(roles) do
+        if role == "Sheriff" then
+            target = Players:FindFirstChild(playerName)
+            break
+        end
+    end
+    
+    -- Priority: Hero second
+    if not target then
+        for playerName, role in pairs(roles) do
+            if role == "Hero" then
+                target = Players:FindFirstChild(playerName)
+                break
+            end
+        end
+    end
+    
+    -- Fallback: any player with gun
+    if not target then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= lp and player.Character and player.Character:FindFirstChild("Gun") then
+                target = player
+                break
+            end
+        end
+    end
+    
+    -- Fallback: any player
+    if not target then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= lp then
+                target = player
+                break
+            end
+        end
+    end
+    
+    if not target or not target.Character then
+        notify("Throw Knife", "No target found!", "x")
+        return
+    end
+    
+    local myHRP = char:FindFirstChild("HumanoidRootPart")
+    local tHRP = target.Character:FindFirstChild("HumanoidRootPart")
+    
+    if not myHRP or not tHRP then
+        notify("Throw Knife", "Position not found!", "x")
+        return
+    end
+    
+    -- Calculate throw direction
+    local aimPos = tHRP.Position + Vector3.new(0, 1.5, 0) -- Chest level
+    
+    pcall(function()
+        throwRemote:FireServer(CFrame.new(myHRP.Position, aimPos), CFrame.new(aimPos))
+        notify("Throw Knife", "Thrown at " .. target.Name, "sword")
+    end)
+end
 
 -- ========== FLING SHERIFF/HERO FUNCTIONS ==========
 
@@ -1790,12 +1904,30 @@ CombatTab:Toggle({
     end
 })
 
+CombatTab:Section({ Title = "Wallbang" })
+
+CombatTab:Toggle({
+    Title = "Wallbang",
+    Desc = "Shoot Murd button fires through walls — no line of sight needed",
+    Icon = "wifi",
+    Value = false,
+    Callback = function(state)
+        wallbangEnabled = state
+        if state then
+            notify("Wallbang", "Enabled! Shoot Murd will fire through walls.", "check")
+        else
+            notify("Wallbang", "Disabled!", "x")
+        end
+    end
+})
+
 -- ========== FLOATING BUTTONS (the 4 main ones + kill all) ==========
 -- These only show when their toggle in WindUI is turned on
 
 local floatButtons = {
     { key = "ShootMurdBtn",  label = "Shoot Murd",  pos = UDim2.new(0.5,  0, 0.2, 0),  fn = shootMurderBtn },
-    { key = "KillAllBtn",    label = "Kill All",    pos = UDim2.new(0.78, 0, 0.2, 0),  fn = killAll        },
+    { key = "ThrowKnifeBtn", label = "Throw Knife", pos = UDim2.new(0.78, 0, 0.2, 0),  fn = throwKnife     },
+    { key = "KillAllBtn",    label = "Kill All",    pos = UDim2.new(0.35, 0, 0.2, 0),  fn = killAll        },
     { key = "GetGunBtn",     label = "Get Gun",     pos = UDim2.new(0.22, 0, 0.2, 0),  fn = grabGun        },
     { key = "InvisBtn",      label = "Invisible",   pos = UDim2.new(0.5,  0, 0.28, 0), fn = function()
         if isInvisible then doInvisOff() else doInvisOn() end
@@ -1821,6 +1953,23 @@ for _, btnDef in ipairs(floatButtons) do
         end
     })
 end
+
+CombatTab:Toggle({
+    Title = "Throw Knife Button",
+    Desc = "Shows floating Throw Knife button on screen",
+    Icon = "square",
+    Value = false,
+    Callback = function(Value)
+        if Value then
+            if not screenGui:FindFirstChild("ThrowKnifeBtnFrame") then
+                CreateWaguriButton("ThrowKnifeBtn", "Throw Knife", UDim2.new(0.78, 0, 0.2, 0), throwKnife)
+            end
+        else
+            local f = screenGui:FindFirstChild("ThrowKnifeBtnFrame")
+            if f then f:Destroy() end
+        end
+    end
+})
 
 -- ========== IMPROVED TIMER + MURDER CHANCE (FIXED) ==========
 -- 3 separate toggles: Timer | Role Display | Murder Chance
