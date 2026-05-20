@@ -51,8 +51,14 @@ WindUI:SetTheme("Waguri")
 local Window  = WindUI:CreateWindow({ Title = "Waguri MM2", Icon = "sword", Author = "by Waguri", Folder = "WaguriMM2", Transparent = true, Theme = "Waguri" })
 Window:ToggleTransparency(true)
 
-local MainTab   = Window:Tab({ Title = "Main",   Icon = "zap"  })
-local LocalTab  = Window:Tab({ Title = "Local",  Icon = "user" })
+-- ========== TABS ==========
+local MainTab     = Window:Tab({ Title = "Main",     Icon = "zap"    })
+local CombatTab   = Window:Tab({ Title = "Combat",   Icon = "sword"  })
+local TeleportTab = Window:Tab({ Title = "Teleport", Icon = "map-pin"})
+local VisualsTab  = Window:Tab({ Title = "Visuals",  Icon = "eye"    })
+local AutoFarmTab = Window:Tab({ Title = "Auto Farm", Icon = "star"    })
+local LocalTab    = Window:Tab({ Title = "Local",    Icon = "user"   })
+local CreditsTab  = Window:Tab({ Title = "Credits",  Icon = "heart"  })
 
 -- ========== WAGURI ANIME PINK FLOATING BUTTON SYSTEM ==========
 local pinkColor = Color3.fromRGB(255, 105, 180)
@@ -828,10 +834,17 @@ do
 end
 
 -- ========== WINDUI MAIN TAB ==========
+MainTab:Paragraph({
+    Title         = "Waguri is so tuff 67",
+    Desc          = "Hi this is waguri and i made this script so pls follow my tiktok or else im gonna tickle ur feet, ik it's corny but i just love yapping lol here's my TikTok btw @waguriii.wow",
+    Color         = "Red",
+    Thumbnail     = "https://www.roblox.com/asset-thumbnail/image?assetId=96912666417288&width=420&height=420&format=png",
+    ThumbnailSize = 200,
+})
 
 MainTab:Section({ Title = "main okay?" })
 
-MainTab:Toggle({
+VisualsTab:Toggle({
     Title    = "ESP EVERYONE",
     Desc     = "I RECOMMEND U TO USE THIS :3",
     Icon     = "eye",
@@ -851,7 +864,7 @@ MainTab:Toggle({
     end
 })
 
-MainTab:Toggle({
+VisualsTab:Toggle({
     Title = "ESP Gun", Desc = "Highlights the gun drop on the map",
     Icon = "crosshair", Value = false,
     Callback = function(Value)
@@ -926,14 +939,199 @@ local FakeBombToggle = MainTab:Toggle({
     end
 })
 
-MainTab:Section({ Title = "Combat" })
+-- ========== FLING SHERIFF/HERO FUNCTIONS ==========
 
-MainTab:Button({
+-- Hidden property functions for fling
+local _shp = sethiddenproperty
+local _simrad = setsimulationradius
+local ZERO_V3 = Vector3.new()
+local NAN_V3 = Vector3.new(0/0, 0/0, 0/0)
+
+-- Set simulation radius for better reach
+task.spawn(function()
+    lp.SimulationRadius = 99999
+    lp.MaximumSimulationRadius = 99999
+    pcall(_simrad, 99999)
+    RunService.Heartbeat:Connect(function()
+        lp.SimulationRadius = 99999
+        lp.MaximumSimulationRadius = 99999
+    end)
+end)
+
+-- Steal gun function (works with firetouchinterest)
+local function stealGunAfterFling()
+    if not Char or not Root then return false end
+    
+    local gun = Workspace:FindFirstChild("GunDrop", true)
+    if not gun then return false end
+    
+    if firetouchinterest then
+        pcall(function()
+            for i = 1, 3 do
+                firetouchinterest(Root, gun, 0)
+                firetouchinterest(Root, gun, 1)
+                task.wait(0.05)
+            end
+        end)
+        return true
+    else
+        pcall(function()
+            gun.CFrame = Root.CFrame * CFrame.new(0, 2, 0)
+        end)
+        return true
+    end
+end
+
+-- Fling specific player function
+local sheriffFlingActive = false
+
+local function flingTargetPlayer(tp, targetType)
+    if sheriffFlingActive then return end
+    sheriffFlingActive = true
+    
+    if not tp or not tp.Character then 
+        sheriffFlingActive = false
+        return 
+    end
+    
+    local lChar = lp.Character
+    local lRoot = lChar and lChar:FindFirstChild("HumanoidRootPart")
+    local lHumanoid = lChar and lChar:FindFirstChild("Humanoid")
+    local tChar = tp.Character
+    local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+    
+    if not lRoot or not tRoot or not lHumanoid then 
+        sheriffFlingActive = false
+        return 
+    end
+
+    local savedPos = lRoot.CFrame
+    local sessionActive = true
+    local flingCon
+    
+    flingCon = RunService.Heartbeat:Connect(function()
+        if not sessionActive or not lRoot.Parent or not tRoot.Parent then
+            if flingCon then flingCon:Disconnect() flingCon = nil end
+            return
+        end
+        pcall(_shp, lHumanoid, "MoveDirectionInternal", NAN_V3)
+        pcall(_shp, lRoot, "PhysicsRepRootPart", tRoot)
+        lRoot.CFrame = tRoot.CFrame
+        lRoot.Velocity = ZERO_V3
+        lRoot.AssemblyLinearVelocity = ZERO_V3
+        lRoot.AssemblyAngularVelocity = ZERO_V3
+        lRoot.RotVelocity = ZERO_V3
+    end)
+
+    task.delay(1, function()
+        sessionActive = false
+        if flingCon then flingCon:Disconnect() flingCon = nil end
+        pcall(_shp, lRoot, "PhysicsRepRootPart", nil)
+        if savedPos and lRoot and lRoot.Parent then
+            lRoot.CFrame = savedPos
+            lRoot.Velocity = ZERO_V3
+            lRoot.AssemblyLinearVelocity = ZERO_V3
+            lRoot.AssemblyAngularVelocity = ZERO_V3
+            lRoot.RotVelocity = ZERO_V3
+        end
+        sheriffFlingActive = false
+        
+        -- AFTER FLING, STEAL THE GUN
+        task.wait(0.5)
+        for attempt = 1, 5 do
+            if stealGunAfterFling() then
+                notify("Steal Gun", "Gun stolen from " .. tp.Name, "target")
+                return
+            end
+            task.wait(0.3)
+        end
+        notify("Steal Gun", "No gun drop found", "x")
+    end)
+end
+
+-- Find and fling Sheriff OR Hero function
+local function findAndFlingGunHolder()
+    -- Get roles from the existing getRoles function
+    local roles = getRoles()
+    
+    local targetFound = nil
+    local targetRole = nil
+    
+    -- Search for Sheriff or Hero in roles
+    for playerName, role in pairs(roles) do
+        if role == "Sheriff" or role == "Hero" then
+            targetFound = Players:FindFirstChild(playerName)
+            targetRole = role
+            if targetFound then
+                break
+            end
+        end
+    end
+    
+    -- If not found in roles, check character directly
+    if not targetFound then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= lp then
+                local char = player.Character
+                if char then
+                    -- Check for Sheriff/Hero tools
+                    if char:FindFirstChild("Sheriff") or char:FindFirstChild("Hero") or char:FindFirstChild("Gun") then
+                        targetFound = player
+                        if char:FindFirstChild("Sheriff") then targetRole = "Sheriff"
+                        elseif char:FindFirstChild("Hero") then targetRole = "Hero"
+                        else targetRole = "Gun Holder" end
+                        break
+                    end
+                    -- Check backpack for gun
+                    local bp = player:FindFirstChild("Backpack")
+                    if bp and bp:FindFirstChild("Gun") then
+                        targetFound = player
+                        targetRole = "Gun Holder"
+                        break
+                    end
+                    -- Check tools
+                    for _, tool in ipairs(char:GetChildren()) do
+                        if tool:IsA("Tool") then
+                            local tLower = string.lower(tool.Name)
+                            if tLower == "gun" or tLower == "sheriff" or tLower == "hero" then
+                                targetFound = player
+                                if tLower == "sheriff" then targetRole = "Sheriff"
+                                elseif tLower == "hero" then targetRole = "Hero"
+                                else targetRole = "Gun Holder" end
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    if targetFound then
+        local icon = targetRole == "Sheriff" and "badge" or (targetRole == "Hero" and "star" or "target")
+        notify(targetRole, "Found " .. targetRole .. ": " .. targetFound.Name, icon)
+        flingTargetPlayer(targetFound, targetRole)
+    else
+        notify("Error", "No Sheriff or Hero found in the game!", "x")
+    end
+end
+
+CombatTab:Section({ Title = "Combat" })
+CombatTab:Button({
+    Title = "Steal gun",
+    Desc = "steal the sheriff gun lol",
+    Icon = "badge",
+    Callback = function()
+        findAndFlingSheriff()
+    end
+})
+
+CombatTab:Button({
     Title = "Grab Gun", Desc = "Teleports the gun drop to you",
     Icon = "package", Callback = grabGun
 })
 
-MainTab:Toggle({
+CombatTab:Toggle({
     Title = "Auto Grab Gun", Desc = "Continuously grabs the gun every 0.1s",
     Icon = "refresh-cw", Value = false,
     Callback = function(Value)
@@ -954,7 +1152,7 @@ MainTab:Toggle({
     end
 })
 
-MainTab:Button({
+CombatTab:Button({
     Title = "Steal Gun (Sheriff/Hero)", Desc = "Steals the gun from another player's hands",
     Icon = "zap",
     Callback = function()
@@ -971,56 +1169,6 @@ MainTab:Button({
             end
         end
         notify("Steal Gun", "Attempted steal!", "check")
-    end
-})
-
-MainTab:Toggle({
-    Title = "Shoot Murder Button", Desc = "Shows a floating draggable Shoot Murder button on screen",
-    Icon = "target", Value = false,
-    Callback = function(Value)
-        if Value then
-            if not screenGui:FindFirstChild("GunWFrame") then
-                CreateWaguriButton("GunW", "Shoot Murder", UDim2.new(0.5, 187, 0.5, -176), shootMurderBtn)
-            end
-        else
-            local f = screenGui:FindFirstChild("GunWFrame") if f then f:Destroy() end
-        end
-    end
-})
-
-MainTab:Toggle({
-    Title = "Gun Aimbot", Desc = "Auto-aims when you fire the gun (needs hook support)",
-    Icon = "crosshair", Value = false,
-    Callback = function(Value)
-        if not isUseHook then notify("Aimbot", "Your executor doesn't support this.", "x") return end
-        env.enabledGunBot = Value
-        env.GunBotConnection = env.GunBotConnection or {}
-        local function setupGunBot(character)
-            if not character then return end
-            local gun = character:FindFirstChild("Gun") if not gun then
-                if env.GunBotConnection.Connection then env.GunBotConnection.Connection:Disconnect() env.GunBotConnection.Connection = nil end return
-            end
-            local cb = gun:FindFirstChild("KnifeLocal") and gun.KnifeLocal:FindFirstChild("CreateBeam")
-            local remote = cb and cb:FindFirstChild("RemoteFunction")
-            if not remote then return end
-            if env.GunBotConnection.Connection then env.GunBotConnection.Connection:Disconnect() env.GunBotConnection.Connection = nil end
-            if env.enabledGunBot then
-                env.GunBotConnection.Connection = gun.Activated:Connect(function()
-                    local targetPos, isSelf = getMurdererTarget()
-                    if not targetPos or isSelf then return end
-                    remote:InvokeServer(1, targetPos, "AH2")
-                end)
-            end
-        end
-        task.spawn(function()
-            while env.enabledGunBot do
-                if Char and Char:FindFirstChild("Gun") then setupGunBot(Char) end
-                task.wait(0.25)
-            end
-            if env.GunBotConnection and env.GunBotConnection.Connection then
-                env.GunBotConnection.Connection:Disconnect() env.GunBotConnection.Connection = nil
-            end
-        end)
     end
 })
 
@@ -1108,10 +1256,10 @@ MainTab:Toggle({
     end
 })
 
-MainTab:Section({ Title = "Teleport" })
+TeleportTab:Section({ Title = "Teleport" })
 
 -- Teleport To Map (FIXED - works for MM2)
-MainTab:Button({
+TeleportTab:Button({
     Title = "Teleport To Map",
     Desc = "Teleports to the game map where coins spawn",
     Icon = "map-pin",
@@ -1183,7 +1331,7 @@ MainTab:Button({
 })
 
 -- Teleport To Lobby (works every time)
-MainTab:Button({
+TeleportTab:Button({
     Title = "Teleport To Lobby",
     Desc = "Teleports to the lobby/waiting area",
     Icon = "map-pin",
@@ -1223,7 +1371,7 @@ MainTab:Button({
 })
 
 -- Teleport To Murderer (new useful teleport)
-MainTab:Button({
+TeleportTab:Button({
     Title = "Teleport To Murderer",
     Desc = "Teleports directly to the murderer",
     Icon = "target",
@@ -1257,7 +1405,7 @@ MainTab:Button({
 })
 
 -- Teleport To Sheriff/Gun Holder
-MainTab:Button({
+TeleportTab:Button({
     Title = "Teleport To Sheriff",
     Desc = "Teleports to the player holding the gun",
     Icon = "target",
@@ -1557,9 +1705,9 @@ UIS.JumpRequest:Connect(function()
     end
 end)
 
-MainTab:Section({ Title = "Silent Aim" })
+CombatTab:Section({ Title = "Silent Aim" })
 
-MainTab:Toggle({
+CombatTab:Toggle({
     Title = "Silent Aim",
     Desc = "Auto-aims and fires at the murderer on left click/tap",
     Icon = "target",
@@ -1581,11 +1729,11 @@ local floatButtons = {
     end },
 }
 
-MainTab:Section({ Title = "Floating Buttons" })
+CombatTab:Section({ Title = "Floating Buttons" })
 
 for _, btnDef in ipairs(floatButtons) do
     local frameRef = nil
-    MainTab:Toggle({
+    CombatTab:Toggle({
         Title = btnDef.label .. " Button", Desc = "Show/hide the floating " .. btnDef.label .. " button on screen",
         Icon = "square", Value = false,
         Callback = function(Value)
@@ -1600,6 +1748,348 @@ for _, btnDef in ipairs(floatButtons) do
         end
     })
 end
+
+-- ========== SIMPLE ROLE & TIMER DISPLAY (CLEAN VERSION) ==========
+
+local displayEnabled = false
+local displayGui = nil
+local displayTimer = nil
+local displayRole = nil
+local displayChance = nil
+local roleHideUntil = nil
+
+local function createDisplayGui()
+    if displayGui then return end
+    
+    displayGui = Instance.new("ScreenGui")
+    displayGui.Name = "WaguriDisplay"
+    displayGui.ResetOnSpawn = false
+    displayGui.Parent = lp:WaitForChild("PlayerGui")
+    
+    displayTimer = Instance.new("TextLabel")
+    displayTimer.Size = UDim2.fromOffset(100, 30)
+    displayTimer.Position = UDim2.new(0.5, -50, 0.02, 0)
+    displayTimer.BackgroundTransparency = 1
+    displayTimer.Text = ""
+    displayTimer.TextColor3 = Color3.fromRGB(255, 220, 240)
+    displayTimer.TextSize = 22
+    displayTimer.Font = Enum.Font.GothamBold
+    displayTimer.TextXAlignment = Enum.TextXAlignment.Center
+    displayTimer.Parent = displayGui
+    
+    displayRole = Instance.new("TextLabel")
+    displayRole.Size = UDim2.fromOffset(200, 25)
+    displayRole.Position = UDim2.new(0.5, -100, 0.07, 0)
+    displayRole.BackgroundTransparency = 1
+    displayRole.Text = ""
+    displayRole.TextColor3 = Color3.fromRGB(255, 220, 240)
+    displayRole.TextSize = 14
+    displayRole.Font = Enum.Font.GothamBold
+    displayRole.TextXAlignment = Enum.TextXAlignment.Center
+    displayRole.Parent = displayGui
+    
+    displayChance = Instance.new("TextLabel")
+    displayChance.Size = UDim2.fromOffset(180, 25)
+    displayChance.Position = UDim2.new(0.5, -90, 0.11, 0)
+    displayChance.BackgroundTransparency = 1
+    displayChance.Text = ""
+    displayChance.TextColor3 = Color3.fromRGB(255, 220, 240)
+    displayChance.TextSize = 12
+    displayChance.Font = Enum.Font.GothamBold
+    displayChance.TextXAlignment = Enum.TextXAlignment.Center
+    displayChance.Parent = displayGui
+end
+
+-- Get player's role
+local function getMyRole()
+    local ok, data = pcall(function()
+        return ReplicatedStorage:FindFirstChild("GetPlayerData", true):InvokeServer()
+    end)
+    if not ok or not data then return nil end
+    for name, info in pairs(data) do
+        if name == lp.Name then
+            return info.Role
+        end
+    end
+    return nil
+end
+
+-- Check if round has started (players are on map)
+local function isRoundActive()
+    return Workspace:FindFirstChild("CoinContainer", true) ~= nil
+end
+
+-- Get current round time
+local function getRoundTime()
+    local timerPart = Workspace:FindFirstChild("RoundTimerPart", true)
+    if timerPart then
+        local surface = timerPart:FindFirstChild("SurfaceGui")
+        if surface then
+            local label = surface:FindFirstChild("Timer")
+            if label and label:IsA("TextLabel") then
+                local text = label.Text
+                if text and text ~= "" then
+                    local mins, secs = text:match("(%d+):(%d+)")
+                    if mins and secs then
+                        return mins .. ":" .. string.format("%02d", tonumber(secs))
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- Get murder chance (only before round starts)
+local function getMurderChance()
+    if isRoundActive() then
+        return nil
+    end
+    
+    local alive = 0
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= lp and player.Character then
+            local hum = player.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                alive = alive + 1
+            end
+        end
+    end
+    
+    -- Check if murderer already exists
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= lp and player.Character and player.Character:FindFirstChild("Knife") then
+            return nil
+        end
+    end
+    
+    if alive > 0 then
+        return math.floor(100 / (alive + 1))
+    end
+    return nil
+end
+
+-- Update all displays
+local function updateDisplay()
+    if not displayEnabled then return end
+    
+    -- Update Timer (only when round is active)
+    local roundTime = getRoundTime()
+    if roundTime and isRoundActive() then
+        displayTimer.Text = roundTime
+    else
+        displayTimer.Text = ""
+    end
+    
+    -- Update Role and Chance
+    local role = getMyRole()
+    if role and not isRoundActive() then
+        -- Show role during lobby/black screen
+        if role == "Murderer" then
+            displayRole.Text = "YOU ARE THE MURDERER"
+            displayRole.TextColor3 = Color3.fromRGB(255, 80, 80)
+        elseif role == "Sheriff" then
+            displayRole.Text = "YOU ARE THE SHERIFF"
+            displayRole.TextColor3 = Color3.fromRGB(80, 150, 255)
+        elseif role == "Innocent" then
+            displayRole.Text = "YOU ARE INNOCENT"
+            displayRole.TextColor3 = Color3.fromRGB(100, 255, 100)
+        end
+        roleHideUntil = nil
+        
+        -- Show murder chance
+        local chance = getMurderChance()
+        if chance then
+            displayChance.Text = "Murderer Chance: " .. chance .. "%"
+        else
+            displayChance.Text = ""
+        end
+    elseif isRoundActive() then
+        -- Round started, clear role and chance
+        displayRole.Text = ""
+        displayChance.Text = ""
+    end
+end
+
+-- Start display loop
+local function startDisplay()
+    if not displayEnabled then return end
+    createDisplayGui()
+    task.spawn(function()
+        while displayEnabled do
+            pcall(updateDisplay)
+            task.wait(0.3)
+        end
+    end)
+end
+
+-- ========== INSTANT ROLE NOTIFY ==========
+local lastNotifiedRoles = {}
+local roleNotifyEnabled = false
+
+local roleNotifyColors = {
+    Murderer = Color3.fromRGB(255, 50, 50),
+    Sheriff = Color3.fromRGB(50, 100, 255),
+    Hero = Color3.fromRGB(255, 200, 50),
+    Innocent = Color3.fromRGB(50, 255, 50),
+}
+
+local function getCurrentRoles()
+    local ok, data = pcall(function()
+        return ReplicatedStorage:FindFirstChild("GetPlayerData", true):InvokeServer()
+    end)
+    if not ok or not data then return {} end
+    local roles = {}
+    for plr, plrData in pairs(data) do
+        if not plrData.Dead then
+            roles[plr] = plrData.Role
+        end
+    end
+    return roles
+end
+
+local function checkForRoleChanges()
+    local currentRoles = getCurrentRoles()
+    
+    for playerName, role in pairs(currentRoles) do
+        local oldRole = lastNotifiedRoles[playerName]
+        if oldRole ~= role then
+            -- Role changed or new player
+            if role == "Murderer" then
+                WindUI:Notify({
+                    Title = "🔪 MURDERER DETECTED!",
+                    Content = playerName .. " is the Murderer!",
+                    Duration = 4,
+                    Icon = "skull"
+                })
+            elseif role == "Sheriff" then
+                WindUI:Notify({
+                    Title = "⭐ SHERIFF DETECTED!",
+                    Content = playerName .. " is the Sheriff!",
+                    Duration = 4,
+                    Icon = "badge"
+                })
+            elseif role == "Hero" then
+                WindUI:Notify({
+                    Title = "🦸 HERO DETECTED!",
+                    Content = playerName .. " is the Hero!",
+                    Duration = 3,
+                    Icon = "star"
+                })
+            end
+            lastNotifiedRoles[playerName] = role
+        end
+    end
+    
+    -- Check for removed players
+    for playerName in pairs(lastNotifiedRoles) do
+        if not currentRoles[playerName] then
+            lastNotifiedRoles[playerName] = nil
+        end
+    end
+end
+
+-- ========== VISUALS TAB TOGGLES ==========
+VisualsTab:Section({ Title = "Visuals this is good lol" })
+
+-- Instant Role Notify Toggle
+VisualsTab:Toggle({
+    Title = "Instant Role Notify",
+    Desc = "Shows a notification immediately when Murderer or Sheriff is revealed",
+    Icon = "bell",
+    Value = false,
+    Callback = function(state)
+        roleNotifyEnabled = state
+        if state then
+            lastNotifiedRoles = {}
+            task.spawn(function()
+                while roleNotifyEnabled do
+                    pcall(checkForRoleChanges)
+                    task.wait(0.5)
+                end
+            end)
+            notify("Role Notify", "Enabled - Will notify when roles are revealed!", "check")
+        else
+            notify("Role Notify", "Disabled", "x")
+        end
+    end
+})
+
+-- Add to Visuals Tab
+VisualsTab:Toggle({
+    Title = "Simple Role & Timer Display",
+    Desc = "Shows your role + murder chance (lobby only) + round timer (in-game)",
+    Icon = "clock",
+    Value = false,
+    Callback = function(state)
+        displayEnabled = state
+        if state then
+            createDisplayGui()
+            startDisplay()
+            if displayGui then displayGui.Enabled = true end
+            WindUI:Notify({ Title = "Display", Content = "Enabled!", Duration = 2, Icon = "check" })
+        else
+            if displayGui then displayGui.Enabled = false end
+            WindUI:Notify({ Title = "Display", Content = "Disabled", Duration = 2, Icon = "x" })
+        end
+    end
+})
+
+-- Murder Percentage Toggle
+VisualsTab:Toggle({
+    Title = "Show Murder Percentage",
+    Desc = "Shows your chance of being the Murderer",
+    Icon = "percent",
+    Value = false,
+    Callback = function(state)
+        if state then
+            createPercentageGUI()
+            if murderPercentageGui then murderPercentageGui.Enabled = true end
+            task.spawn(function()
+                while state and murderPercentageGui and murderPercentageGui.Enabled do
+                    pcall(updateMurderPercentage)
+                    task.wait(1)
+                end
+            end)
+            notify("Murder Percentage", "Enabled!", "check")
+        else
+            if murderPercentageGui then murderPercentageGui.Enabled = false end
+        end
+    end
+})
+
+-- ── Auto Farm Tab ─────────────────────────────────────────────────────────────
+
+AutoFarmTab:Paragraph({
+    Title         = "Auto Farm",
+    Desc          = "Press the button below to load autofarm.",
+    Color         = "Green",
+    Thumbnail     = "https://www.roblox.com/asset-thumbnail/image?assetId=80648874729441&width=420&height=420&format=png",
+    ThumbnailSize = 250,
+
+    Buttons = {
+        {
+            Icon  = "play",
+            Title = "Start Auto Farm",
+
+            Callback = function()
+
+                WindUI:Notify({
+                    Title = "Auto Farm",
+                    Content = "Loading autofarm...",
+                    Duration = 3,
+                    Icon = "loader"
+                })
+
+                loadstring(game:HttpGet(
+                    "https://pastefy.app/pBWtDYvc/raw",
+                    true
+                ))()
+
+            end,
+        }
+    }
+})
 
 -- ========== STARTUP ==========
 WindUI:Notify({
