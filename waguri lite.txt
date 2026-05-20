@@ -833,6 +833,94 @@ do
     isUseHook = check()
 end
 
+-- Gun Drop Notifier variables
+local gunNotifierEnabled = false
+local gunNotifierLoop = nil
+local lastGunPosition = nil
+local lastNotifyTime = 0
+
+-- Function to check for gun drop and notify
+local function checkForGunDrop()
+    local gun = Workspace:FindFirstChild("GunDrop", true)
+    
+    if gun then
+        -- Check if this is a new gun or same as before
+        local currentPos = gun.Position
+        if not lastGunPosition or (lastGunPosition - currentPos).Magnitude > 5 then
+            local currentTime = tick()
+            -- Only notify every 3 seconds to avoid spam
+            if currentTime - lastNotifyTime > 3 then
+                lastNotifyTime = currentTime
+                
+                -- Find who dropped the gun (if possible)
+                local owner = nil
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= lp then
+                        local char = player.Character
+                        if char then
+                            local distance = (char.HumanoidRootPart.Position - gun.Position).Magnitude
+                            if distance < 10 then
+                                owner = player.Name
+                                break
+                            end
+                        end
+                    end
+                end
+                
+                if owner then
+                    WindUI:Notify({
+                        Title = "🔫 GUN DROPPED!",
+                        Content = owner .. " dropped a gun!",
+                        Duration = 3,
+                        Icon = "target"
+                    })
+                else
+                    WindUI:Notify({
+                        Title = "🔫 GUN DROPPED!",
+                        Content = "A gun has been dropped on the map!",
+                        Duration = 3,
+                        Icon = "target"
+                    })
+                end
+                
+                -- Add ping sound effect
+                pcall(function()
+                    local sound = Instance.new("Sound")
+                    sound.SoundId = "rbxassetid://1381866476" -- Notification sound
+                    sound.Volume = 0.5
+                    sound.Parent = lp.Character and lp.Character:FindFirstChild("Head") or workspace
+                    sound:Play()
+                    task.delay(1, function() sound:Destroy() end)
+                end)
+            end
+        end
+        lastGunPosition = currentPos
+    else
+        lastGunPosition = nil
+    end
+end
+
+-- Start gun notifier loop
+local function startGunNotifier()
+    if gunNotifierLoop then return end
+    
+    gunNotifierLoop = task.spawn(function()
+        while gunNotifierEnabled do
+            pcall(checkForGunDrop)
+            task.wait(0.5) -- Check every 0.5 seconds
+        end
+    end)
+end
+
+-- Stop gun notifier loop
+local function stopGunNotifier()
+    if gunNotifierLoop then
+        task.cancel(gunNotifierLoop)
+        gunNotifierLoop = nil
+    end
+    lastGunPosition = nil
+end
+
 -- ========== WINDUI MAIN TAB ==========
 MainTab:Paragraph({
     Title         = "Waguri is so tuff 67",
@@ -985,7 +1073,7 @@ end
 -- Fling specific player function
 local sheriffFlingActive = false
 
-local function flingTargetPlayer(tp, targetType)
+local function flingSheriffPlayer(tp)
     if sheriffFlingActive then return end
     sheriffFlingActive = true
     
@@ -1050,18 +1138,16 @@ local function flingTargetPlayer(tp, targetType)
 end
 
 -- Find and fling Sheriff OR Hero function
-local function findAndFlingGunHolder()
+local function findAndFlingSheriff()
     -- Get roles from the existing getRoles function
     local roles = getRoles()
     
     local targetFound = nil
-    local targetRole = nil
     
     -- Search for Sheriff or Hero in roles
     for playerName, role in pairs(roles) do
         if role == "Sheriff" or role == "Hero" then
             targetFound = Players:FindFirstChild(playerName)
-            targetRole = role
             if targetFound then
                 break
             end
@@ -1074,30 +1160,15 @@ local function findAndFlingGunHolder()
             if player ~= lp then
                 local char = player.Character
                 if char then
-                    -- Check for Sheriff/Hero tools
                     if char:FindFirstChild("Sheriff") or char:FindFirstChild("Hero") or char:FindFirstChild("Gun") then
                         targetFound = player
-                        if char:FindFirstChild("Sheriff") then targetRole = "Sheriff"
-                        elseif char:FindFirstChild("Hero") then targetRole = "Hero"
-                        else targetRole = "Gun Holder" end
                         break
                     end
-                    -- Check backpack for gun
-                    local bp = player:FindFirstChild("Backpack")
-                    if bp and bp:FindFirstChild("Gun") then
-                        targetFound = player
-                        targetRole = "Gun Holder"
-                        break
-                    end
-                    -- Check tools
                     for _, tool in ipairs(char:GetChildren()) do
                         if tool:IsA("Tool") then
                             local tLower = string.lower(tool.Name)
                             if tLower == "gun" or tLower == "sheriff" or tLower == "hero" then
                                 targetFound = player
-                                if tLower == "sheriff" then targetRole = "Sheriff"
-                                elseif tLower == "hero" then targetRole = "Hero"
-                                else targetRole = "Gun Holder" end
                                 break
                             end
                         end
@@ -1108,9 +1179,8 @@ local function findAndFlingGunHolder()
     end
     
     if targetFound then
-        local icon = targetRole == "Sheriff" and "badge" or (targetRole == "Hero" and "star" or "target")
-        notify(targetRole, "Found " .. targetRole .. ": " .. targetFound.Name, icon)
-        flingTargetPlayer(targetFound, targetRole)
+        notify("Target", "Found: " .. targetFound.Name, "badge")
+        flingSheriffPlayer(targetFound)
     else
         notify("Error", "No Sheriff or Hero found in the game!", "x")
     end
@@ -1749,6 +1819,192 @@ for _, btnDef in ipairs(floatButtons) do
     })
 end
 
+-- ========== IMPROVED TIMER + MURDER CHANCE (FIXED) ==========
+-- 3 separate toggles: Timer | Role Display | Murder Chance
+
+-- â”€â”€ SHARED STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+local roundPhase      = "lobby"   -- "lobby" | "round" | "ended"
+local roundEndTick    = nil
+local lastCoinState   = false
+local ROUND_DURATION  = 180       -- 3 minutes
+local roundsCompleted = 0         -- only show murder % after at least 1 round
+
+-- â”€â”€ TICKET SYSTEM (improved murder chance) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+local ticketMap = {}
+
+local function updateTickets()
+    for _, player in ipairs(Players:GetPlayers()) do
+        ticketMap[player.Name] = (ticketMap[player.Name] or 1) + 1
+    end
+    -- Reset whoever has the knife (the murderer)
+    for _, player in ipairs(Players:GetPlayers()) do
+        local c  = player.Character
+        local bp = player:FindFirstChild("Backpack")
+        if (c and c:FindFirstChild("Knife")) or (bp and bp:FindFirstChild("Knife")) then
+            ticketMap[player.Name] = 1
+            break
+        end
+    end
+end
+
+-- â”€â”€ COIN WATCHER (drives round phase) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+local function coinExists()
+    return Workspace:FindFirstChild("CoinContainer", true) ~= nil
+end
+
+task.spawn(function()
+    while true do
+        local coinNow = coinExists()
+
+        if coinNow and not lastCoinState then
+            -- Coins appeared â†’ round just started
+            roundPhase   = "round"
+            roundEndTick = tick() + ROUND_DURATION
+            task.wait(1)
+            updateTickets()
+
+        elseif not coinNow and lastCoinState then
+            -- Coins gone â†’ round ended / back to lobby
+            roundsCompleted = roundsCompleted + 1
+            roundPhase      = "ended"
+            roundEndTick    = nil
+            -- Small delay then back to lobby so displays clear cleanly
+            task.wait(3)
+            roundPhase = "lobby"
+        end
+
+        lastCoinState = coinNow
+        task.wait(0.5)
+    end
+end)
+
+-- â”€â”€ HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+local function formatTime(seconds)
+    if seconds <= 0 then return "0:00" end
+    local m = math.floor(seconds / 60)
+    local s = math.floor(seconds % 60)
+    return m .. ":" .. string.format("%02d", s)
+end
+
+local function getMyRole()
+    local ok, data = pcall(function()
+        return ReplicatedStorage:FindFirstChild("GetPlayerData", true):InvokeServer()
+    end)
+    if not ok or not data then return nil end
+    for name, info in pairs(data) do
+        if name == lp.Name then return info.Role end
+    end
+    return nil
+end
+
+local function makeLabel(parent, size, pos, textSize, color)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size                   = size
+    lbl.Position               = pos
+    lbl.BackgroundTransparency = 1
+    lbl.Text                   = ""
+    lbl.TextColor3             = color or Color3.fromRGB(255, 220, 240)
+    lbl.TextSize               = textSize
+    lbl.Font                   = Enum.Font.GothamBold
+    lbl.TextXAlignment         = Enum.TextXAlignment.Center
+    lbl.TextStrokeTransparency = 0.55
+    lbl.TextStrokeColor3       = Color3.fromRGB(0, 0, 0)
+    lbl.Parent                 = parent
+    return lbl
+end
+
+local function makeGui(name)
+    local g = Instance.new("ScreenGui")
+    g.Name             = name
+    g.ResetOnSpawn     = false
+    g.ZIndexBehavior   = Enum.ZIndexBehavior.Sibling
+    g.Parent           = lp:WaitForChild("PlayerGui")
+    return g
+end
+
+-- Get murder chance (only before round starts)
+local function getMurderChance()
+    if isRoundActive() then
+        return nil
+    end
+    
+    local alive = 0
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= lp and player.Character then
+            local hum = player.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                alive = alive + 1
+            end
+        end
+    end
+    
+    -- Check if murderer already exists
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= lp and player.Character and player.Character:FindFirstChild("Knife") then
+            return nil
+        end
+    end
+    
+    if alive > 0 then
+        return math.floor(100 / (alive + 1))
+    end
+    return nil
+end
+
+-- Update all displays
+local function updateDisplay()
+    if not displayEnabled then return end
+    
+    -- Update Timer (only when round is active)
+    local roundTime = getRoundTime()
+    if roundTime and isRoundActive() then
+        displayTimer.Text = roundTime
+    else
+        displayTimer.Text = ""
+    end
+    
+    -- Update Role and Chance
+    local role = getMyRole()
+    if role and not isRoundActive() then
+        -- Show role during lobby/black screen
+        if role == "Murderer" then
+            displayRole.Text = ""
+            displayRole.TextColor3 = Color3.fromRGB(255, 80, 80)
+        elseif role == "Sheriff" then
+            displayRole.Text = ""
+            displayRole.TextColor3 = Color3.fromRGB(80, 150, 255)
+        elseif role == "Innocent" then
+            displayRole.Text = ""
+            displayRole.TextColor3 = Color3.fromRGB(100, 255, 100)
+        end
+        roleHideUntil = nil
+        
+        -- Show murder chance
+        local chance = getMurderChance()
+        if chance then
+            displayChance.Text = "Murderer Chance: " .. chance .. "%"
+        else
+            displayChance.Text = ""
+        end
+    elseif isRoundActive() then
+        -- Round started, clear role and chance
+        displayRole.Text = ""
+        displayChance.Text = ""
+    end
+end
+
+-- Start display loop
+local function startDisplay()
+    if not displayEnabled then return end
+    createDisplayGui()
+    task.spawn(function()
+        while displayEnabled do
+            pcall(updateDisplay)
+            task.wait(0.3)
+        end
+    end)
+end
+
 -- ========== SIMPLE ROLE & TIMER DISPLAY (CLEAN VERSION) ==========
 
 local displayEnabled = false
@@ -1886,13 +2142,13 @@ local function updateDisplay()
     if role and not isRoundActive() then
         -- Show role during lobby/black screen
         if role == "Murderer" then
-            displayRole.Text = "YOU ARE THE MURDERER"
+            displayRole.Text = ""
             displayRole.TextColor3 = Color3.fromRGB(255, 80, 80)
         elseif role == "Sheriff" then
-            displayRole.Text = "YOU ARE THE SHERIFF"
+            displayRole.Text = ""
             displayRole.TextColor3 = Color3.fromRGB(80, 150, 255)
         elseif role == "Innocent" then
-            displayRole.Text = "YOU ARE INNOCENT"
+            displayRole.Text = ""
             displayRole.TextColor3 = Color3.fromRGB(100, 255, 100)
         end
         roleHideUntil = nil
@@ -2015,10 +2271,89 @@ VisualsTab:Toggle({
     end
 })
 
+
+-- Gun Notifier Toggle
+VisualsTab:Toggle({
+    Title = "Gun Drop Notifier",
+    Desc = "Get notified when a gun is dropped on the map",
+    Icon = "target",
+    Value = false,
+    Callback = function(state)
+        gunNotifierEnabled = state
+        if state then
+            startGunNotifier()
+            notify("Gun Notifier", "Enabled! You will be notified when a gun drops.", "check")
+        else
+            stopGunNotifier()
+            notify("Gun Notifier", "Disabled!", "x")
+        end
+    end
+})
+
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- TOGGLE 1 â€” ROUND TIMER
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+local timerGui     = nil
+local timerEnabled = false
+
+VisualsTab:Toggle({
+    Title    = "Round Timer",
+    Desc     = "Shows a countdown timer when the round is active. Stops when round ends.",
+    Icon     = "clock",
+    Value    = false,
+    Callback = function(state)
+        timerEnabled = state
+
+        if state then
+            if not timerGui or not timerGui.Parent then
+                timerGui = makeGui("WaguriTimer")
+            end
+            timerGui.Enabled = true
+
+            local timerLabel = makeLabel(
+                timerGui,
+                UDim2.fromOffset(120, 36),
+                UDim2.new(0.5, -60, 0.02, 0),
+                26,
+                Color3.fromRGB(255, 220, 240)
+            )
+
+            task.spawn(function()
+                while timerEnabled do
+                    if roundPhase == "round" and roundEndTick then
+                        local remaining = roundEndTick - tick()
+                        if remaining > 0 then
+                            timerLabel.Text       = formatTime(remaining)
+                            timerLabel.TextColor3 = remaining <= 30
+                                and Color3.fromRGB(255, 70, 70)
+                                or  Color3.fromRGB(255, 220, 240)
+                        else
+                            -- Time ran out â€” stop showing
+                            timerLabel.Text = ""
+                            roundEndTick    = nil
+                        end
+                    else
+                        -- Not in a round: always blank
+                        timerLabel.Text = ""
+                    end
+                    task.wait(0.25)
+                end
+                -- Toggle turned off
+                timerLabel.Text = ""
+            end)
+
+            notify("Timer", "Round timer enabled!", "check")
+        else
+            if timerGui then timerGui.Enabled = false end
+            notify("Timer", "Round timer disabled", "x")
+        end
+    end
+})
+
 -- Add to Visuals Tab
 VisualsTab:Toggle({
-    Title = "Simple Role & Timer Display",
-    Desc = "Shows your role + murder chance (lobby only) + round timer (in-game)",
+    Title = "Murder percentage idk if accurate lol",
+    Desc = "shows ur murder percentage",
     Icon = "clock",
     Value = false,
     Callback = function(state)
@@ -2035,25 +2370,62 @@ VisualsTab:Toggle({
     end
 })
 
--- Murder Percentage Toggle
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- TOGGLE 2 â€” ROLE DISPLAY
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+local roleGui     = nil
+local roleEnabled = false
+
 VisualsTab:Toggle({
-    Title = "Show Murder Percentage",
-    Desc = "Shows your chance of being the Murderer",
-    Icon = "percent",
-    Value = false,
+    Title    = "Role Display",
+    Desc     = "Shows your role (Murderer / Sheriff / Innocent) during the lobby phase.",
+    Icon     = "user",
+    Value    = false,
     Callback = function(state)
+        roleEnabled = state
+
         if state then
-            createPercentageGUI()
-            if murderPercentageGui then murderPercentageGui.Enabled = true end
+            if not roleGui or not roleGui.Parent then
+                roleGui = makeGui("WaguriRole")
+            end
+            roleGui.Enabled = true
+
+            local roleLabel = makeLabel(
+                roleGui,
+                UDim2.fromOffset(240, 30),
+                UDim2.new(0.5, -120, 0.08, 0),
+                17,
+                Color3.fromRGB(255, 220, 240)
+            )
+
             task.spawn(function()
-                while state and murderPercentageGui and murderPercentageGui.Enabled do
-                    pcall(updateMurderPercentage)
-                    task.wait(1)
+                while roleEnabled do
+                    if roundPhase == "lobby" then
+                        local role = getMyRole()
+                        if role == "Murderer" then
+                            roleLabel.Text       = "YOU ARE THE MURDERER"
+                            roleLabel.TextColor3 = Color3.fromRGB(255, 70, 70)
+                        elseif role == "Sheriff" then
+                            roleLabel.Text       = "YOU ARE THE SHERIFF"
+                            roleLabel.TextColor3 = Color3.fromRGB(80, 150, 255)
+                        elseif role == "Innocent" then
+                            roleLabel.Text       = "YOU ARE INNOCENT"
+                            roleLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+                        else
+                            roleLabel.Text = ""
+                        end
+                    else
+                        roleLabel.Text = ""
+                    end
+                    task.wait(0.4)
                 end
+                roleLabel.Text = ""
             end)
-            notify("Murder Percentage", "Enabled!", "check")
+
+            notify("Role Display", "Enabled!", "check")
         else
-            if murderPercentageGui then murderPercentageGui.Enabled = false end
+            if roleGui then roleGui.Enabled = false end
+            notify("Role Display", "Disabled", "x")
         end
     end
 })
