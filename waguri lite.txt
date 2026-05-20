@@ -54,10 +54,13 @@ Window:ToggleTransparency(true)
 -- ========== TABS ==========
 local MainTab     = Window:Tab({ Title = "Main",     Icon = "zap"    })
 local CombatTab   = Window:Tab({ Title = "Combat",   Icon = "sword"  })
+local FlingTab    = Window:Tab({ Title = "Reset Player",    Icon = "zap"    })
 local TeleportTab = Window:Tab({ Title = "Teleport", Icon = "map-pin"})
 local VisualsTab  = Window:Tab({ Title = "Visuals",  Icon = "eye"    })
 local AutoFarmTab = Window:Tab({ Title = "Auto Farm", Icon = "star"    })
 local LocalTab    = Window:Tab({ Title = "Local",    Icon = "user"   })
+local TrollTab    = Window:Tab({ Title = "Troll",    Icon = "smile"  })
+local MiscTab     = Window:Tab({ Title = "Misc",     Icon = "settings" })
 local CreditsTab  = Window:Tab({ Title = "Credits",  Icon = "heart"  })
 
 -- ========== WAGURI ANIME PINK FLOATING BUTTON SYSTEM ==========
@@ -2458,6 +2461,855 @@ AutoFarmTab:Paragraph({
                     true
                 ))()
 
+            end,
+        }
+    }
+})
+
+-- ========== TROLL TAB (from Skiddex) ==========
+TrollTab:Paragraph({
+    Title = "😂 TROLL FEATURES",
+    Desc = "Meme and troll features",
+    Color = "Red",
+})
+
+-- State for troll features
+local _shp_troll = sethiddenproperty
+local ZERO_V3_troll = Vector3.new()
+local NAN_V3_troll = Vector3.new(0/0, 0/0, 0/0)
+
+local trollSelectedPlayer = nil
+
+local function getTrollTarget()
+    return trollSelectedPlayer
+end
+
+local trollPlayerDropdown = TrollTab:Dropdown({
+    Title = "Target Player",
+    Desc = "Choose a player to target for troll features",
+    Icon = "users",
+    Values = (function()
+        local list = {}
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= lp then table.insert(list, p.Name) end
+        end
+        if #list == 0 then table.insert(list, "No other players") end
+        return list
+    end)(),
+    Multi = false,
+    Callback = function(value)
+        trollSelectedPlayer = Players:FindFirstChild(value)
+        if trollSelectedPlayer then
+            notify("Troll Target", "Selected: " .. trollSelectedPlayer.Name, "check")
+        end
+    end
+})
+
+task.spawn(function()
+    while true do
+        task.wait(2)
+        if trollPlayerDropdown and trollPlayerDropdown.SetValues then
+            pcall(function()
+                local list = {}
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p ~= lp then table.insert(list, p.Name) end
+                end
+                if #list == 0 then table.insert(list, "No other players") end
+                trollPlayerDropdown:SetValues(list)
+            end)
+        end
+    end
+end)
+
+TrollTab:Divider()
+
+-- ForceJump
+local trollForceJumpCon = nil
+local trollForceJumpSavedPos = nil
+
+TrollTab:Button({
+    Title = "🦘 FORCE JUMP",
+    Desc = "Force jump on target (0.25s)",
+    Icon = "arrow-up",
+    Callback = function()
+        local target = getTrollTarget()
+        if not target or not target.Character then
+            notify("Error", "No valid target!", "x")
+            return
+        end
+        local lRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+        local tRoot = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        if not lRoot or not tRoot then return end
+        trollForceJumpSavedPos = lRoot.CFrame
+        local CF_OFFSET = CFrame.new(0, -3, 0) * CFrame.Angles(math.rad(90), 0, math.rad(-69))
+        trollForceJumpCon = RunService.Heartbeat:Connect(function()
+            if not lRoot.Parent or not tRoot.Parent then
+                if trollForceJumpCon then trollForceJumpCon:Disconnect() end
+                return
+            end
+            pcall(_shp_troll, lRoot, "PhysicsRepRootPart", tRoot)
+            lRoot.CFrame = tRoot.CFrame * CF_OFFSET
+            lRoot.Velocity = ZERO_V3_troll
+        end)
+        task.delay(0.25, function()
+            if trollForceJumpCon then trollForceJumpCon:Disconnect() end
+            pcall(_shp_troll, lRoot, "PhysicsRepRootPart", nil)
+            if trollForceJumpSavedPos and lRoot then lRoot.CFrame = trollForceJumpSavedPos end
+            notify("ForceJump", "Done!", "check")
+        end)
+    end
+})
+
+-- Rocket
+TrollTab:Button({
+    Title = "🚀 ROCKET",
+    Desc = "Rocket fling target (0.55s)",
+    Icon = "flame",
+    Callback = function()
+        local target = getTrollTarget()
+        if not target or not target.Character then notify("Error", "No valid target!", "x") return end
+        local lChar = lp.Character
+        local lRoot = lChar and lChar:FindFirstChild("HumanoidRootPart")
+        local lHumanoid = lChar and lChar:FindFirstChild("Humanoid")
+        local tRoot = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        if not lRoot or not tRoot or not lHumanoid then return end
+        local savedPos = lRoot.CFrame
+        local sessionActive = true
+        local CF_OFFSET = CFrame.new(Vector3.new(0, -3, 0)) * CFrame.Angles(math.rad(90), 0, math.rad(-69))
+        local flingCon
+        flingCon = RunService.Heartbeat:Connect(function()
+            if not sessionActive or not lRoot.Parent or not tRoot.Parent then
+                if flingCon then flingCon:Disconnect() end return
+            end
+            pcall(_shp_troll, lHumanoid, "MoveDirectionInternal", NAN_V3_troll)
+            pcall(_shp_troll, lRoot, "PhysicsRepRootPart", tRoot)
+            lRoot.CFrame = tRoot.CFrame * CF_OFFSET
+            lRoot.Velocity = ZERO_V3_troll
+            lRoot.AssemblyLinearVelocity = ZERO_V3_troll
+            lRoot.AssemblyAngularVelocity = ZERO_V3_troll
+            lRoot.RotVelocity = ZERO_V3_troll
+        end)
+        task.delay(0.55, function()
+            sessionActive = false
+            if flingCon then flingCon:Disconnect() end
+            pcall(_shp_troll, lRoot, "PhysicsRepRootPart", nil)
+            if savedPos and lRoot and lRoot.Parent then lRoot.CFrame = savedPos end
+            notify("Done", "Finished Rocket", "check")
+        end)
+    end
+})
+
+-- Slam
+TrollTab:Button({
+    Title = "💥 SLAM",
+    Desc = "Slam on target (4s)",
+    Icon = "arrow-down",
+    Callback = function()
+        local target = getTrollTarget()
+        if not target or not target.Character then notify("Error", "No valid target!", "x") return end
+        local lChar = lp.Character
+        local lRoot = lChar and lChar:FindFirstChild("HumanoidRootPart")
+        local lHumanoid = lChar and lChar:FindFirstChild("Humanoid")
+        local tRoot = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        if not lRoot or not tRoot or not lHumanoid then return end
+        local savedPos = lRoot.CFrame
+        local sessionActive = true
+        local CF_OFFSET = CFrame.new(Vector3.new(0, 0.35, 0)) * CFrame.new()
+        local flingCon
+        flingCon = RunService.Heartbeat:Connect(function()
+            if not sessionActive or not lRoot.Parent or not tRoot.Parent then
+                if flingCon then flingCon:Disconnect() end return
+            end
+            pcall(_shp_troll, lHumanoid, "MoveDirectionInternal", NAN_V3_troll)
+            pcall(_shp_troll, lRoot, "PhysicsRepRootPart", tRoot)
+            lRoot.CFrame = tRoot.CFrame * CF_OFFSET
+            lRoot.Velocity = ZERO_V3_troll
+            lRoot.AssemblyLinearVelocity = ZERO_V3_troll
+            lRoot.AssemblyAngularVelocity = ZERO_V3_troll
+            lRoot.RotVelocity = ZERO_V3_troll
+        end)
+        task.delay(4, function()
+            sessionActive = false
+            if flingCon then flingCon:Disconnect() end
+            pcall(_shp_troll, lRoot, "PhysicsRepRootPart", nil)
+            if savedPos and lRoot and lRoot.Parent then lRoot.CFrame = savedPos end
+            notify("Done", "Finished Slam", "check")
+        end)
+    end
+})
+
+-- Jumpscare
+TrollTab:Button({
+    Title = "👻 JUMPSCARE",
+    Desc = "First person jumpscare (2s)",
+    Icon = "eye",
+    Callback = function()
+        local target = getTrollTarget()
+        if not target or not target.Character then notify("Error", "No valid target!", "x") return end
+        local lChar = lp.Character
+        local lRoot = lChar and lChar:FindFirstChild("HumanoidRootPart")
+        local lHumanoid = lChar and lChar:FindFirstChild("Humanoid")
+        local tRoot = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        if not lRoot or not tRoot or not lHumanoid then return end
+        local savedPos = lRoot.CFrame
+        local sessionActive = true
+        local CF_OFFSET = CFrame.new(Vector3.new(0, 1.5, -0.8)) * CFrame.Angles(0, math.rad(180), 0)
+        local flingCon
+        flingCon = RunService.Heartbeat:Connect(function()
+            if not sessionActive or not lRoot.Parent or not tRoot.Parent then
+                if flingCon then flingCon:Disconnect() end return
+            end
+            pcall(_shp_troll, lHumanoid, "MoveDirectionInternal", NAN_V3_troll)
+            pcall(_shp_troll, lRoot, "PhysicsRepRootPart", tRoot)
+            lRoot.CFrame = tRoot.CFrame * CF_OFFSET
+            lRoot.Velocity = ZERO_V3_troll
+            lRoot.AssemblyLinearVelocity = ZERO_V3_troll
+            lRoot.AssemblyAngularVelocity = ZERO_V3_troll
+            lRoot.RotVelocity = ZERO_V3_troll
+        end)
+        task.delay(2, function()
+            sessionActive = false
+            if flingCon then flingCon:Disconnect() end
+            pcall(_shp_troll, lRoot, "PhysicsRepRootPart", nil)
+            if savedPos and lRoot and lRoot.Parent then lRoot.CFrame = savedPos end
+            notify("Done", "Finished Jumpscare", "check")
+        end)
+    end
+})
+
+-- Head Sit
+local trollHeadSitActive = false
+local trollHeadSitCon = nil
+
+TrollTab:Toggle({
+    Title = "💺 HEAD SIT",
+    Desc = "Sit on target's head",
+    Icon = "user",
+    Value = false,
+    Callback = function(value)
+        trollHeadSitActive = value
+        if trollHeadSitActive then
+            local target = getTrollTarget()
+            if not target or not target.Character then
+                notify("Error", "No valid target!", "x")
+                trollHeadSitActive = false
+                return
+            end
+            local lRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+            local lHumanoid = lp.Character and lp.Character:FindFirstChild("Humanoid")
+            local tRoot = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+            trollHeadSitCon = RunService.Heartbeat:Connect(function()
+                if not trollHeadSitActive then
+                    if trollHeadSitCon then trollHeadSitCon:Disconnect() end return
+                end
+                if not lRoot or not tRoot or not lRoot.Parent or not tRoot.Parent then return end
+                pcall(_shp_troll, lRoot, "PhysicsRepRootPart", tRoot)
+                lRoot.CFrame = tRoot.CFrame * CFrame.new(0, 3, 0.9)
+                if lHumanoid then lHumanoid.Sit = true end
+            end)
+        else
+            if trollHeadSitCon then trollHeadSitCon:Disconnect() end
+            if lp.Character and lp.Character:FindFirstChild("Humanoid") then
+                lp.Character.Humanoid.Sit = false
+            end
+            pcall(_shp_troll, Root, "PhysicsRepRootPart", nil)
+        end
+    end
+})
+
+-- Bang Animation
+local trollBangActive = false
+local trollBangAnimTrack1, trollBangAnimTrack2, trollBangAnimLoop = nil, nil, nil
+
+local function playTrollBangAnimation(humanoid)
+    if not humanoid then return end
+    if not trollBangAnimTrack1 then
+        local anim1 = Instance.new("Animation")
+        anim1.AnimationId = "rbxassetid://215262147"
+        trollBangAnimTrack1 = humanoid:LoadAnimation(anim1)
+    end
+    if not trollBangAnimTrack2 then
+        local anim2 = Instance.new("Animation")
+        anim2.AnimationId = "rbxassetid://185299570"
+        trollBangAnimTrack2 = humanoid:LoadAnimation(anim2)
+    end
+    trollBangAnimTrack1:Play()
+    task.delay(0.5, function()
+        if trollBangAnimTrack2 then trollBangAnimTrack2:Play() end
+    end)
+end
+
+TrollTab:Toggle({
+    Title = "🔫 BANG",
+    Desc = "Play shooting animation on yourself",
+    Icon = "music",
+    Value = false,
+    Callback = function(value)
+        trollBangActive = value
+        if trollBangActive and lp.Character and lp.Character:FindFirstChild("Humanoid") then
+            playTrollBangAnimation(lp.Character.Humanoid)
+            trollBangAnimLoop = task.spawn(function()
+                while trollBangActive do
+                    task.wait(1)
+                    if lp.Character and lp.Character:FindFirstChild("Humanoid") then
+                        playTrollBangAnimation(lp.Character.Humanoid)
+                    end
+                end
+            end)
+        elseif not trollBangActive and trollBangAnimLoop then
+            task.cancel(trollBangAnimLoop)
+            if trollBangAnimTrack1 then trollBangAnimTrack1:Stop() end
+            if trollBangAnimTrack2 then trollBangAnimTrack2:Stop() end
+        end
+    end
+})
+
+-- ========== MISC TAB (from Skiddex Settings) ==========
+MiscTab:Paragraph({
+    Title = "⚙️ MISC / SETTINGS",
+    Desc = "Extra UI and config settings",
+    Color = "Red",
+})
+
+-- Transparent Window toggle
+MiscTab:Toggle({
+    Title = "Transparent Window",
+    Desc = "Toggle window transparency",
+    Icon = "eye",
+    Value = true,
+    Callback = function(value)
+        Window:ToggleTransparency(value)
+    end
+})
+
+MiscTab:Divider()
+
+-- No Jump (keep target on ground)
+local miscNoJumpActive = false
+local miscNoJumpCon = nil
+
+MiscTab:Toggle({
+    Title = "🚫 NO JUMP (on target)",
+    Desc = "Prevents target from jumping by sitting on them",
+    Icon = "arrow-up",
+    Value = false,
+    Callback = function(value)
+        miscNoJumpActive = value
+        if miscNoJumpActive then
+            local target = getTrollTarget()
+            if not target or not target.Character then
+                notify("Error", "No valid target! Set one in Troll tab.", "x")
+                miscNoJumpActive = false
+                return
+            end
+            local lRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+            local tRoot = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+            miscNoJumpCon = RunService.Heartbeat:Connect(function()
+                if not miscNoJumpActive then
+                    if miscNoJumpCon then miscNoJumpCon:Disconnect() end return
+                end
+                if not lRoot or not tRoot then return end
+                pcall(_shp_troll, lRoot, "PhysicsRepRootPart", tRoot)
+                lRoot.CFrame = tRoot.CFrame * CFrame.new(0, 3.45, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+                lRoot.Velocity = ZERO_V3_troll
+            end)
+        else
+            if miscNoJumpCon then miscNoJumpCon:Disconnect() end
+            pcall(_shp_troll, Root, "PhysicsRepRootPart", nil)
+        end
+    end
+})
+
+-- Platform Fly on target
+local miscPlatformFlyActive = false
+local miscPlatformFlyCon = nil
+
+MiscTab:Toggle({
+    Title = "🕊️ PLATFORM FLY (on target)",
+    Desc = "Platform fly attached to target",
+    Icon = "wind",
+    Value = false,
+    Callback = function(value)
+        miscPlatformFlyActive = value
+        if miscPlatformFlyActive then
+            local target = getTrollTarget()
+            if not target or not target.Character then
+                notify("Error", "No valid target! Set one in Troll tab.", "x")
+                miscPlatformFlyActive = false
+                return
+            end
+            local lRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+            local lHumanoid = lp.Character and lp.Character:FindFirstChild("Humanoid")
+            local tRoot = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+            miscPlatformFlyCon = RunService.Heartbeat:Connect(function()
+                if not miscPlatformFlyActive then
+                    if miscPlatformFlyCon then miscPlatformFlyCon:Disconnect() end return
+                end
+                if not lRoot or not tRoot then return end
+                pcall(_shp_troll, lRoot, "PhysicsRepRootPart", tRoot)
+                lRoot.CFrame = tRoot.CFrame * CFrame.new(0, -3.45, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+                lRoot.Velocity = ZERO_V3_troll
+                if lHumanoid then lHumanoid.PlatformStand = true end
+            end)
+        else
+            if miscPlatformFlyCon then miscPlatformFlyCon:Disconnect() end
+            if lp.Character and lp.Character:FindFirstChild("Humanoid") then
+                lp.Character.Humanoid.PlatformStand = false
+            end
+            pcall(_shp_troll, Root, "PhysicsRepRootPart", nil)
+        end
+    end
+})
+
+-- ========== FLING TAB ==========
+
+-- Skiddex-style fling core (PhysicsRepRootPart method)
+local skidFlingIsFlinging = false
+
+-- Normal fling: returns to saved position after done
+local function skidFlingPlayer(tp)
+    if skidFlingIsFlinging then return end
+    skidFlingIsFlinging = true
+    if not tp or not tp.Character then skidFlingIsFlinging = false return end
+
+    local lChar = lp.Character
+    local lRoot = lChar and lChar:FindFirstChild("HumanoidRootPart")
+    local lHumanoid = lChar and lChar:FindFirstChild("Humanoid")
+    local tChar = tp.Character
+    local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+
+    if not lRoot or not tRoot or not lHumanoid then skidFlingIsFlinging = false return end
+
+    local savedPos = lRoot.CFrame
+    local sessionActive = true
+    local flingCon
+    flingCon = RunService.Heartbeat:Connect(function()
+        if not sessionActive or not lRoot.Parent or not tRoot.Parent then
+            if flingCon then flingCon:Disconnect() flingCon = nil end
+            return
+        end
+        pcall(_shp, lHumanoid, "MoveDirectionInternal", NAN_V3)
+        pcall(_shp, lRoot, "PhysicsRepRootPart", tRoot)
+        lRoot.CFrame = tRoot.CFrame
+        lRoot.Velocity = ZERO_V3
+        lRoot.AssemblyLinearVelocity = ZERO_V3
+        lRoot.AssemblyAngularVelocity = ZERO_V3
+        lRoot.RotVelocity = ZERO_V3
+    end)
+
+    task.delay(1, function()
+        sessionActive = false
+        if flingCon then flingCon:Disconnect() flingCon = nil end
+        pcall(_shp, lRoot, "PhysicsRepRootPart", nil)
+        if savedPos and lRoot and lRoot.Parent then
+            lRoot.CFrame = savedPos
+            lRoot.Velocity = ZERO_V3
+            lRoot.AssemblyLinearVelocity = ZERO_V3
+            lRoot.AssemblyAngularVelocity = ZERO_V3
+            lRoot.RotVelocity = ZERO_V3
+        end
+        skidFlingIsFlinging = false
+        notify("Fling", "Flinged " .. tp.Name, "skull")
+    end)
+end
+
+-- Fling All variant: NO return to position, immediately ready for next target
+local skidFlingAllIsFlinging = false
+
+local function skidFlingPlayerFast(tp, onDone)
+    if skidFlingAllIsFlinging then return end
+    skidFlingAllIsFlinging = true
+    if not tp or not tp.Character then
+        skidFlingAllIsFlinging = false
+        if onDone then onDone() end
+        return
+    end
+
+    local lChar = lp.Character
+    local lRoot = lChar and lChar:FindFirstChild("HumanoidRootPart")
+    local lHumanoid = lChar and lChar:FindFirstChild("Humanoid")
+    local tChar = tp.Character
+    local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+
+    if not lRoot or not tRoot or not lHumanoid then
+        skidFlingAllIsFlinging = false
+        if onDone then onDone() end
+        return
+    end
+
+    local sessionActive = true
+    local flingCon
+    flingCon = RunService.Heartbeat:Connect(function()
+        if not sessionActive or not lRoot.Parent or not tRoot.Parent then
+            if flingCon then flingCon:Disconnect() flingCon = nil end
+            return
+        end
+        pcall(_shp, lHumanoid, "MoveDirectionInternal", NAN_V3)
+        pcall(_shp, lRoot, "PhysicsRepRootPart", tRoot)
+        lRoot.CFrame = tRoot.CFrame
+        lRoot.Velocity = ZERO_V3
+        lRoot.AssemblyLinearVelocity = ZERO_V3
+        lRoot.AssemblyAngularVelocity = ZERO_V3
+        lRoot.RotVelocity = ZERO_V3
+    end)
+
+    task.delay(1, function()
+        sessionActive = false
+        if flingCon then flingCon:Disconnect() flingCon = nil end
+        pcall(_shp, lRoot, "PhysicsRepRootPart", nil)
+        -- no return to saved position — jump straight to next
+        skidFlingAllIsFlinging = false
+        if onDone then onDone() end
+    end)
+end
+
+FlingTab:Paragraph({
+    Title = "Reset player features :0",
+    Desc = "Fling Sheriff, Murderer, or any selected player",
+    Color = "Red",
+})
+
+-- Select player dropdown
+local flingTabTarget = nil
+
+local function getFlingTabPlayerList()
+    local list = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= lp then table.insert(list, p.Name) end
+    end
+    if #list == 0 then table.insert(list, "No other players") end
+    return list
+end
+
+local flingTabDropdown = FlingTab:Dropdown({
+    Title = "Select Player",
+    Desc = "Choose a player to fling",
+    Icon = "users",
+    Values = getFlingTabPlayerList(),
+    Multi = false,
+    Callback = function(value)
+        flingTabTarget = Players:FindFirstChild(value)
+        if flingTabTarget then
+            notify("Fling Target", "Selected: " .. flingTabTarget.Name, "check")
+        end
+    end
+})
+
+-- Keep dropdown refreshed
+task.spawn(function()
+    while true do
+        task.wait(2)
+        pcall(function()
+            if flingTabDropdown and flingTabDropdown.SetValues then
+                flingTabDropdown:SetValues(getFlingTabPlayerList())
+            end
+        end)
+    end
+end)
+
+FlingTab:Divider()
+
+-- Fling Selected Player
+FlingTab:Button({
+    Title = "Reset Selected Player",
+    Desc = "Flings the player you selected above",
+    Icon = "zap",
+    Callback = function()
+        if not flingTabTarget then
+            notify("Fling", "No player selected!", "x")
+            return
+        end
+        local p = Players:FindFirstChild(flingTabTarget.Name)
+        if p and p ~= lp then
+            skidFlingPlayer(p)
+        else
+            notify("Fling", "Player not found in server!", "x")
+        end
+    end
+})
+
+FlingTab:Divider()
+
+-- Fling Sheriff / Hero
+FlingTab:Button({
+    Title = "Reset sherrif/hero",
+    Desc = "Finds and flings the Sheriff or Hero",
+    Icon = "badge",
+    Callback = function()
+        for plr, role in pairs(getRoles()) do
+            if role == "Sheriff" or role == "Hero" then
+                local p = Players:FindFirstChild(plr)
+                if p and p ~= lp then
+                    skidFlingPlayer(p)
+                    notify("Fling", "Flinging: " .. plr, "check")
+                    return
+                end
+            end
+        end
+        -- fallback: check characters directly
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= lp and p.Character then
+                if p.Character:FindFirstChild("Gun") or p.Character:FindFirstChild("Sheriff") or p.Character:FindFirstChild("Hero") then
+                    skidFlingPlayer(p)
+                    notify("Fling", "Flinging: " .. p.Name, "check")
+                    return
+                end
+            end
+        end
+        notify("Fling", "No Sheriff or Hero found!", "x")
+    end
+})
+
+-- Fling Murderer
+FlingTab:Button({
+    Title = "Reset Murder : D",
+    Desc = "Resets the murder",
+    Icon = "skull",
+    Callback = function()
+        for plr, role in pairs(getRoles()) do
+            if role == "Murderer" then
+                local p = Players:FindFirstChild(plr)
+                if p and p ~= lp then
+                    skidFlingPlayer(p)
+                    notify("Fling", "Flinging: " .. plr, "check")
+                    return
+                end
+            end
+        end
+        -- fallback: knife detection
+        if murderer and murderer ~= lp then
+            skidFlingPlayer(murderer)
+            notify("Fling", "Flinging: " .. murderer.Name, "check")
+            return
+        end
+        notify("Fling", "No Murderer found!", "x")
+    end
+})
+
+FlingTab:Divider()
+
+-- Fling All
+local flingAllActive = false
+local flingAllIndex = 1
+local flingAllList = {}
+
+local function startFlingAll()
+    flingAllList = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= lp then table.insert(flingAllList, p) end
+    end
+    if #flingAllList == 0 then notify("Fling All", "No players to fling!", "x") return end
+    flingAllIndex = 1
+    flingAllActive = true
+    local function flingNext()
+        if not flingAllActive or flingAllIndex > #flingAllList then
+            flingAllActive = false
+            notify("Fling All", "Completed!", "check")
+            return
+        end
+        local target = flingAllList[flingAllIndex]
+        flingAllIndex = flingAllIndex + 1
+        if target and target.Character then
+            skidFlingPlayerFast(target, flingNext)
+        else
+            flingNext()
+        end
+    end
+    flingNext()
+end
+
+FlingTab:Toggle({
+    Title = "Reset All R.I.P",
+    Desc = "Flings every player fast — press again to stop",
+    Icon = "users",
+    Callback = function()
+        if flingAllActive then
+            flingAllActive = false
+            notify("Fling All", "Stopped!", "x")
+        else
+            startFlingAll()
+        end
+    end
+})
+
+FlingTab:Divider()
+FlingTab:Section({ Title = "Spam Reset Player XD" })
+
+-- ========== TOUCH FLING ==========
+local tfEnabled = false
+local tfTouchedCon = nil
+local tfConnections = {}
+
+local function startTouchFling()
+    local function onTouched(hit)
+        if not tfEnabled then return end
+        local char = hit:FindFirstAncestorWhichIsA("Model")
+        if not char then return end
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return end
+        local targetPlayer = Players:GetPlayerFromCharacter(char)
+        if not targetPlayer or targetPlayer == lp then return end
+        if tfConnections[targetPlayer] then return end
+
+        local lChar = lp.Character
+        local lHrp = lChar and lChar:FindFirstChild("HumanoidRootPart")
+        local tHrp = char:FindFirstChild("HumanoidRootPart")
+        if not lHrp or not tHrp then return end
+
+        local sessionActive = true
+        local con = RunService.Heartbeat:Connect(function()
+            if not sessionActive then return end
+            if not lHrp or not lHrp.Parent then sessionActive = false return end
+            if not tHrp or not tHrp:IsDescendantOf(Workspace) then
+                tHrp = char:FindFirstChild("HumanoidRootPart")
+                if not tHrp then return end
+            end
+            pcall(_shp, lHrp, "PhysicsRepRootPart", tHrp)
+            lHrp.CFrame = tHrp.CFrame
+            lHrp.Velocity = ZERO_V3
+            pcall(_shp, lChar.Humanoid, "MoveDirectionInternal", NAN_V3)
+        end)
+
+        tfConnections[targetPlayer] = con
+
+        task.delay(1.5, function()
+            sessionActive = false
+            if con then con:Disconnect() end
+            tfConnections[targetPlayer] = nil
+            if lHrp and lHrp.Parent then
+                pcall(_shp, lHrp, "PhysicsRepRootPart", nil)
+            end
+        end)
+    end
+
+    local char = lp.Character
+    if char then
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then tfTouchedCon = hrp.Touched:Connect(onTouched) end
+    end
+    lp.CharacterAdded:Connect(function(newChar)
+        if not tfEnabled then return end
+        task.wait(0.5)
+        local newHrp = newChar:FindFirstChild("HumanoidRootPart")
+        if newHrp then
+            if tfTouchedCon then tfTouchedCon:Disconnect() end
+            tfTouchedCon = newHrp.Touched:Connect(onTouched)
+        end
+    end)
+end
+
+local function stopTouchFling()
+    tfEnabled = false
+    if tfTouchedCon then tfTouchedCon:Disconnect() tfTouchedCon = nil end
+    for _, con in pairs(tfConnections) do
+        if con then con:Disconnect() end
+    end
+    tfConnections = {}
+    local char = lp.Character
+    if char then
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then pcall(_shp, hrp, "PhysicsRepRootPart", nil) end
+    end
+end
+
+FlingTab:Button({
+    Title = "Spam Reset Player",
+    Desc = ":skull: 😭",
+    Icon = "hand",
+    Value = false,
+    Callback = function(value)
+        tfEnabled = value
+        if tfEnabled then
+            startTouchFling()
+            notify("Spam Reset 😎", "Enabled!", "check")
+        else
+            stopTouchFling()
+            notify("Spam Reset XD", "Disabled!", "x")
+        end
+    end
+})
+
+FlingTab:Divider()
+
+-- ========== INVERT MOVEMENT ==========
+-- Real skidbsx method: attaches behind target at offset (0, 0.7, -0.8)
+-- making their movement feel inverted from their perspective
+local invertMovementEnabled = false
+local invertMovementCon = nil
+local invertMovementSavedPos = nil
+
+FlingTab:Toggle({
+    Title = "Start Spam Reset Player",
+    Desc = "Starts the Spam reset Ofc",
+    Icon = "refresh-cw",
+    Value = false,
+    Callback = function(value)
+        invertMovementEnabled = value
+        if invertMovementEnabled then
+            local target = flingTabTarget
+            if not target or not target.Character then
+                notify("Waguri :3", "No target selected!", "x")
+                invertMovementEnabled = false
+                return
+            end
+            local lChar = lp.Character
+            local lRoot = lChar and lChar:FindFirstChild("HumanoidRootPart")
+            local lHumanoid = lChar and lChar:FindFirstChild("Humanoid")
+            local tChar = target.Character
+            local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+            if not lRoot or not tRoot or not lHumanoid then
+                notify("Waguri is on the moon", "Something went wrong!", "x")
+                invertMovementEnabled = false
+                return
+            end
+            invertMovementSavedPos = lRoot.CFrame
+            local CF_OFFSET = CFrame.new(Vector3.new(0, 0.7, -0.8))
+            invertMovementCon = RunService.Heartbeat:Connect(function()
+                if not invertMovementEnabled then
+                    if invertMovementCon then invertMovementCon:Disconnect() invertMovementCon = nil end
+                    return
+                end
+                if not lRoot or not lRoot.Parent then return end
+                if not tRoot or not tRoot:IsDescendantOf(workspace) then
+                    tChar = target.Character
+                    tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+                    if not tRoot then return end
+                end
+                pcall(_shp, lRoot, "PhysicsRepRootPart", tRoot)
+                lRoot.CFrame = tRoot.CFrame * CF_OFFSET
+                lRoot.Velocity = ZERO_V3
+                lRoot.AssemblyLinearVelocity = ZERO_V3
+                lRoot.AssemblyAngularVelocity = ZERO_V3
+                lRoot.RotVelocity = ZERO_V3
+            end)
+            notify("Waguri is the best", "Enabled!", "check")
+        else
+            if invertMovementCon then invertMovementCon:Disconnect() invertMovementCon = nil end
+            local lRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+            if invertMovementSavedPos and lRoot and lRoot.Parent then
+                lRoot.CFrame = invertMovementSavedPos
+            end
+            pcall(_shp, lp.Character and lp.Character:FindFirstChild("HumanoidRootPart"), "PhysicsRepRootPart", nil)
+            invertMovementSavedPos = nil
+            notify("Idk anymore lol", "Disabled!", "x")
+        end
+    end
+})
+
+-- ── Credits Tab ───────────────────────────────────────────────────────────────
+CreditsTab:Paragraph({
+    Title         = "Waguri | Official",
+    Desc          = "Made by waguri def not lying :(",
+    Color         = "Red",
+    Thumbnail = "https://www.roblox.com/asset-thumbnail/image?assetId=80648874729441&width=420&height=420&format=png",
+    ThumbnailSize = 140,
+    Buttons = {
+        {
+            Icon     = "users",
+            Title    = "Discord",
+            Callback = function()
+                setclipboard("https://discord.gg/GE6nKMcne")
+                WindUI:Notify({ Title = "Copied!", Content = "Discord invite copied to clipboard.", Duration = 3, Icon = "check" })
             end,
         }
     }
